@@ -1,0 +1,479 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: razerblade-system-dashboard
+  namespace: monitoring
+data:
+  razerblade-18-system.json: |
+    {
+      "id": null,
+      "title": "Razer Blade 18 - System Overview",
+      "description": "Comprehensive system monitoring for Razer Blade 18 running Ubuntu 22.04",
+      "tags": ["system", "razerblade", "performance", "showcase"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "5s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-3h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "System Information",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "node_uname_info{nodename=\"razerblade-18-rz09-0484\"}",
+              "legendFormat": "{{ nodename }}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "textMode": "name"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "center",
+                "textMode": "value"
+              }
+            }
+          },
+          "gridPos": {"h": 3, "w": 6, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Uptime",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "time() - node_boot_time_seconds",
+              "legendFormat": "Uptime",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 3, "w": 6, "x": 6, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "CPU Model",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "count(node_cpu_seconds_total{mode=\"idle\"})",
+              "legendFormat": "CPU Cores",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [
+                {"type": "value", "value": "32", "text": "Intel i9-14900HX (32 cores)"}
+              ]
+            }
+          },
+          "gridPos": {"h": 3, "w": 6, "x": 12, "y": 0}
+        },
+        {
+          "id": 4,
+          "title": "GPU Status",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "1",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [
+                {"type": "value", "value": "1", "text": "NVIDIA RTX 4080"}
+              ]
+            }
+          },
+          "gridPos": {"h": 3, "w": 6, "x": 18, "y": 0}
+        },
+        {
+          "id": 5,
+          "title": "CPU Usage",
+          "type": "gauge",
+          "targets": [
+            {
+              "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+              "legendFormat": "CPU Usage",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 60},
+                  {"color": "orange", "value": 80},
+                  {"color": "red", "value": 90}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 0, "y": 3}
+        },
+        {
+          "id": 6,
+          "title": "Memory Usage",
+          "type": "gauge",
+          "targets": [
+            {
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+              "legendFormat": "Memory Usage",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "orange", "value": 85},
+                  {"color": "red", "value": 95}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 6, "y": 3}
+        },
+        {
+          "id": 7,
+          "title": "CPU & Memory Details",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "node_memory_MemTotal_bytes",
+              "legendFormat": "Total Memory",
+              "refId": "A"
+            },
+            {
+              "expr": "node_memory_MemAvailable_bytes",
+              "legendFormat": "Available Memory",
+              "refId": "B"
+            },
+            {
+              "expr": "node_load15",
+              "legendFormat": "Load Average (15m)",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Load Average (15m)"},
+                "properties": [{"id": "unit", "value": "short"}]
+              }
+            ]
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 12, "y": 3}
+        },
+        {
+          "id": 8,
+          "title": "System Temperatures",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "node_hwmon_temp_celsius",
+              "legendFormat": "{{ chip }} - {{ sensor }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "thresholds": {
+                "steps": [
+                  {"color": "blue", "value": null},
+                  {"color": "green", "value": 40},
+                  {"color": "yellow", "value": 60},
+                  {"color": "orange", "value": 75},
+                  {"color": "red", "value": 85}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 3}
+        },
+        {
+          "id": 9,
+          "title": "CPU Usage by Core",
+          "type": "heatmap",
+          "targets": [
+            {
+              "expr": "100 - (rate(node_cpu_seconds_total{mode=\"idle\"}[1m]) * 100)",
+              "legendFormat": "CPU {{ cpu }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            }
+          },
+          "options": {
+            "calculate": true,
+            "yAxis": {
+              "unit": "percent",
+              "decimals": 0
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "cellGap": 1,
+            "color": {
+              "mode": "scheme",
+              "scheme": "Turbo",
+              "steps": 256
+            }
+          },
+          "gridPos": {"h": 10, "w": 12, "x": 0, "y": 11}
+        },
+        {
+          "id": 10,
+          "title": "Memory Breakdown",
+          "type": "piechart",
+          "targets": [
+            {
+              "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+              "legendFormat": "Used",
+              "refId": "A"
+            },
+            {
+              "expr": "node_memory_Cached_bytes",
+              "legendFormat": "Cached",
+              "refId": "B"
+            },
+            {
+              "expr": "node_memory_Buffers_bytes",
+              "legendFormat": "Buffers",
+              "refId": "C"
+            },
+            {
+              "expr": "node_memory_MemFree_bytes",
+              "legendFormat": "Free",
+              "refId": "D"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            }
+          },
+          "options": {
+            "pieType": "donut",
+            "displayLabels": ["name", "percent"],
+            "legendDisplayMode": "table",
+            "legendPlacement": "right"
+          },
+          "gridPos": {"h": 10, "w": 12, "x": 12, "y": 11}
+        },
+        {
+          "id": 11,
+          "title": "Disk I/O Performance",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "rate(node_disk_read_bytes_total[5m])",
+              "legendFormat": "Read - {{ device }}",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(node_disk_written_bytes_total[5m])",
+              "legendFormat": "Write - {{ device }}",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 21}
+        },
+        {
+          "id": 12,
+          "title": "Network I/O",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{device!~\"lo|docker.*|veth.*\"}[5m])",
+              "legendFormat": "RX - {{ device }}",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|docker.*|veth.*\"}[5m])",
+              "legendFormat": "TX - {{ device }}",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 21}
+        },
+        {
+          "id": 13,
+          "title": "File System Usage",
+          "type": "bargauge",
+          "targets": [
+            {
+              "expr": "100 - ((node_filesystem_avail_bytes{fstype!~\"tmpfs|fuse.lxcfs|squashfs|vfat\"} * 100) / node_filesystem_size_bytes{fstype!~\"tmpfs|fuse.lxcfs|squashfs|vfat\"})",
+              "legendFormat": "{{ mountpoint }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "orange", "value": 85},
+                  {"color": "red", "value": 95}
+                ]
+              }
+            }
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient"
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 29}
+        },
+        {
+          "id": 14,
+          "title": "Power Supply & Battery",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "node_power_supply_capacity",
+              "legendFormat": "Battery Level",
+              "refId": "A"
+            },
+            {
+              "expr": "node_power_supply_online",
+              "legendFormat": "AC Power",
+              "refId": "B"
+            },
+            {
+              "expr": "node_power_supply_voltage_min_design / 1000000",
+              "legendFormat": "Voltage",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent"
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "AC Power"},
+                "properties": [
+                  {"id": "unit", "value": "short"},
+                  {"id": "mappings", "value": [
+                    {"type": "value", "value": "0", "text": "Unplugged"},
+                    {"type": "value", "value": "1", "text": "Plugged In"}
+                  ]}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Voltage"},
+                "properties": [{"id": "unit", "value": "volt"}]
+              }
+            ]
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 37}
+        },
+        {
+          "id": 15,
+          "title": "System Load Trend",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "node_load1",
+              "legendFormat": "1 min",
+              "refId": "A"
+            },
+            {
+              "expr": "node_load5",
+              "legendFormat": "5 min",
+              "refId": "B"
+            },
+            {
+              "expr": "node_load15",
+              "legendFormat": "15 min",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 8, "y": 37}
+        },
+        {
+          "id": 16,
+          "title": "Context Switches & Interrupts",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "rate(node_context_switches_total[5m])",
+              "legendFormat": "Context Switches/sec",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(node_intr_total[5m])",
+              "legendFormat": "Interrupts/sec",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops"
+            }
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 16, "y": 37}
+        }
+      ]
+    }

@@ -1,0 +1,356 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-storage
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      orgId: 1
+      url: http://prometheus:9090
+      isDefault: true
+      editable: true
+    - name: Loki
+      type: loki
+      access: proxy
+      orgId: 1
+      uid: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      editable: true
+      isDefault: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards
+    - name: 'phase2'
+      orgId: 1
+      folder: 'Phase 2'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-phase2
+    - name: 'health'
+      orgId: 1
+      folder: 'Monitoring Health'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-health
+    - name: 'razerblade-system'
+      orgId: 1
+      folder: 'Razer Blade'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-razerblade/system
+    - name: 'razerblade-process'
+      orgId: 1
+      folder: 'Razer Blade'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-razerblade/process
+    - name: 'razerblade-power'
+      orgId: 1
+      folder: 'Razer Blade'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-razerblade/power
+    - name: 'razerblade-network'
+      orgId: 1
+      folder: 'Razer Blade'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-razerblade/network
+    - name: 'razerblade-performance'
+      orgId: 1
+      folder: 'Razer Blade'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-razerblade/performance
+    - name: 'logs-comprehensive'
+      orgId: 1
+      folder: 'ODIN Logs'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-logs-comprehensive
+    - name: 'simple-logs'
+      orgId: 1
+      folder: 'ODIN Logs'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-simple-logs
+    - name: 'overview'
+      orgId: 1
+      folder: 'ODIN'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-overview
+    - name: 'claude'
+      orgId: 1
+      folder: 'ODIN'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-claude
+    - name: 'razerblade-gpu'
+      orgId: 1
+      folder: 'Razer Blade'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-razerblade/gpu
+    - name: 'logs'
+      orgId: 1
+      folder: 'Log Analysis'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-logs
+    - name: 'anomaly'
+      orgId: 1
+      folder: 'ML Anomaly Detection'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-anomaly
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:9.3.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"
+        - name: GF_INSTALL_PLUGINS
+          value: "grafana-clock-panel,grafana-piechart-panel"
+        - name: GF_SERVER_DOMAIN
+          value: "odin.local"
+        - name: GF_SERVER_ROOT_URL
+          value: "http://odin.local:31494/"
+        volumeMounts:
+        - name: storage
+          mountPath: /var/lib/grafana
+        - name: datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: dashboards-provider
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: grafana-config
+          mountPath: /etc/grafana/grafana.ini
+          subPath: grafana.ini
+        - name: grafana-logo
+          mountPath: /usr/share/grafana/public/img/grafana_icon.svg
+          subPath: logo.svg
+        - name: grafana-logo
+          mountPath: /usr/share/grafana/public/img/grafana_typelogo.svg
+          subPath: logo.svg
+        - name: dashboards
+          mountPath: /var/lib/grafana/dashboards
+        - name: phase2-dashboards
+          mountPath: /var/lib/grafana/dashboards-phase2
+        - name: monitoring-health-dashboard
+          mountPath: /var/lib/grafana/dashboards-health
+        - name: razerblade-system-dashboard
+          mountPath: /var/lib/grafana/dashboards-razerblade/system
+        - name: process-monitoring-dashboard
+          mountPath: /var/lib/grafana/dashboards-razerblade/process
+        - name: power-thermal-dashboard
+          mountPath: /var/lib/grafana/dashboards-razerblade/power
+        - name: loki-dashboards
+          mountPath: /var/lib/grafana/dashboards-logs
+        - name: network-dashboard
+          mountPath: /var/lib/grafana/dashboards-razerblade/network
+        - name: performance-dashboard
+          mountPath: /var/lib/grafana/dashboards-razerblade/performance
+        - name: gpu-dashboard
+          mountPath: /var/lib/grafana/dashboards-razerblade/gpu
+        - name: simple-logs-dashboard
+          mountPath: /var/lib/grafana/dashboards-simple-logs
+        - name: system-overview-dashboard
+          mountPath: /var/lib/grafana/dashboards-overview
+        - name: claude-code-dashboard
+          mountPath: /var/lib/grafana/dashboards-claude
+        - name: application-network-dashboard
+          mountPath: /var/lib/grafana/dashboards-app-network
+        - name: anomaly-dashboard
+          mountPath: /var/lib/grafana/dashboards-anomaly
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: grafana-pvc
+      - name: datasources
+        configMap:
+          name: grafana-datasources
+      - name: dashboards-provider
+        configMap:
+          name: grafana-dashboard-provider
+      - name: dashboards
+        configMap:
+          name: grafana-dashboards
+      - name: phase2-dashboards
+        configMap:
+          name: phase2-dashboards
+      - name: monitoring-health-dashboard
+        configMap:
+          name: monitoring-self-dashboard
+      - name: razerblade-system-dashboard
+        configMap:
+          name: razerblade-system-dashboard
+      - name: process-monitoring-dashboard
+        configMap:
+          name: host-process-dashboard
+      - name: power-thermal-dashboard
+        configMap:
+          name: power-thermal-dashboard
+      - name: loki-dashboards
+        configMap:
+          name: loki-analysis-dashboards
+      - name: network-dashboard
+        configMap:
+          name: network-analysis-dashboard
+      - name: performance-dashboard
+        configMap:
+          name: performance-baseline-dashboard
+      - name: gpu-dashboard
+        configMap:
+          name: gpu-monitoring-dashboard
+      - name: simple-logs-dashboard
+        configMap:
+          name: simple-logs-dashboard
+      - name: system-overview-dashboard
+        configMap:
+          name: system-overview-dashboard
+      - name: claude-code-dashboard
+        configMap:
+          name: claude-code-dashboard
+      - name: application-network-dashboard
+        configMap:
+          name: application-network-dashboard
+      - name: grafana-config
+        configMap:
+          name: grafana-config
+      - name: grafana-logo
+        configMap:
+          name: grafana-logo
+      - name: anomaly-dashboard
+        configMap:
+          name: anomaly-detection-dashboard
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  selector:
+    app: grafana
+  ports:
+  - name: web
+    port: 3000
+    targetPort: 3000
+  type: NodePort

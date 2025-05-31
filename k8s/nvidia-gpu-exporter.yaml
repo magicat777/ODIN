@@ -1,0 +1,180 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nvidia-gpu-exporter-script
+  namespace: monitoring
+data:
+  gpu-exporter.py: |
+    #!/usr/bin/env python3
+    import subprocess
+    import time
+    import re
+    from prometheus_client import start_http_server, Gauge
+    
+    # Define metrics
+    gpu_temp = Gauge('nvidia_gpu_temperature_celsius', 'GPU Temperature in Celsius', ['gpu', 'name'])
+    gpu_power = Gauge('nvidia_gpu_power_watts', 'GPU Power Usage in Watts', ['gpu', 'name'])
+    gpu_memory_used = Gauge('nvidia_gpu_memory_used_mb', 'GPU Memory Used in MB', ['gpu', 'name'])
+    gpu_memory_total = Gauge('nvidia_gpu_memory_total_mb', 'GPU Memory Total in MB', ['gpu', 'name'])
+    gpu_utilization = Gauge('nvidia_gpu_utilization_percent', 'GPU Utilization Percentage', ['gpu', 'name'])
+    gpu_memory_utilization = Gauge('nvidia_gpu_memory_utilization_percent', 'GPU Memory Utilization', ['gpu', 'name'])
+    gpu_fan_speed = Gauge('nvidia_gpu_fan_speed_percent', 'GPU Fan Speed Percentage', ['gpu', 'name'])
+    gpu_encoder_util = Gauge('nvidia_gpu_encoder_utilization_percent', 'GPU Encoder Utilization', ['gpu', 'name'])
+    gpu_decoder_util = Gauge('nvidia_gpu_decoder_utilization_percent', 'GPU Decoder Utilization', ['gpu', 'name'])
+    
+    def get_gpu_metrics():
+        """Get GPU metrics using nvidia-smi"""
+        try:
+            # Get basic metrics
+            cmd = [
+                '/host/usr/bin/nvidia-smi',
+                '--query-gpu=index,name,temperature.gpu,power.draw,memory.used,memory.total,utilization.gpu,utilization.memory,fan.speed,utilization.encoder,utilization.decoder',
+                '--format=csv,noheader,nounits'
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"nvidia-smi error: {result.stderr}")
+                return
+            
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                    
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) >= 11:
+                    idx = parts[0]
+                    name = parts[1]
+                    
+                    # Temperature
+                    try:
+                        gpu_temp.labels(gpu=idx, name=name).set(float(parts[2]))
+                    except:
+                        pass
+                    
+                    # Power
+                    try:
+                        gpu_power.labels(gpu=idx, name=name).set(float(parts[3]))
+                    except:
+                        pass
+                    
+                    # Memory
+                    try:
+                        mem_used = float(parts[4])
+                        mem_total = float(parts[5])
+                        gpu_memory_used.labels(gpu=idx, name=name).set(mem_used)
+                        gpu_memory_total.labels(gpu=idx, name=name).set(mem_total)
+                    except:
+                        pass
+                    
+                    # Utilization
+                    try:
+                        gpu_utilization.labels(gpu=idx, name=name).set(float(parts[6]))
+                        gpu_memory_utilization.labels(gpu=idx, name=name).set(float(parts[7]))
+                    except:
+                        pass
+                    
+                    # Fan speed
+                    try:
+                        if parts[8] != '[N/A]':
+                            gpu_fan_speed.labels(gpu=idx, name=name).set(float(parts[8]))
+                    except:
+                        pass
+                    
+                    # Encoder/Decoder
+                    try:
+                        gpu_encoder_util.labels(gpu=idx, name=name).set(float(parts[9]))
+                        gpu_decoder_util.labels(gpu=idx, name=name).set(float(parts[10]))
+                    except:
+                        pass
+                        
+        except Exception as e:
+            print(f"Error collecting GPU metrics: {e}")
+    
+    if __name__ == '__main__':
+        # Start HTTP server
+        start_http_server(9400)
+        print("NVIDIA GPU Exporter started on port 9400")
+        
+        # Collect metrics every 5 seconds
+        while True:
+            get_gpu_metrics()
+            time.sleep(5)
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-gpu-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: nvidia-gpu-exporter
+  template:
+    metadata:
+      labels:
+        app: nvidia-gpu-exporter
+    spec:
+      hostPID: true
+      containers:
+      - name: nvidia-gpu-exporter
+        image: python:3.10-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install prometheus_client
+          python /scripts/gpu-exporter.py
+        ports:
+        - containerPort: 9400
+          hostPort: 9400
+          name: metrics
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: nvidia-bin
+          mountPath: /host/usr/bin
+          readOnly: true
+        - name: nvidia-lib
+          mountPath: /host/usr/lib/x86_64-linux-gnu
+          readOnly: true
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: LD_LIBRARY_PATH
+          value: "/host/usr/lib/x86_64-linux-gnu"
+        - name: PATH
+          value: "/host/usr/bin:$PATH"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: script
+        configMap:
+          name: nvidia-gpu-exporter-script
+          defaultMode: 0755
+      - name: nvidia-bin
+        hostPath:
+          path: /usr/bin
+      - name: nvidia-lib
+        hostPath:
+          path: /usr/lib/x86_64-linux-gnu
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nvidia-gpu-exporter
+  namespace: monitoring
+  labels:
+    app: nvidia-gpu-exporter
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9400
+    targetPort: 9400
+  selector:
+    app: nvidia-gpu-exporter

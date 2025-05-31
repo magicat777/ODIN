@@ -1,0 +1,50 @@
+# Patch to add missing alert rule volume mounts to Prometheus
+# Run: kubectl patch deployment prometheus -n monitoring --patch "$(cat this-file.yaml)"
+
+spec:
+  template:
+    spec:
+      containers:
+      - name: prometheus
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: gpu-alert-rules
+          mountPath: /etc/prometheus/rules/gpu
+        - name: power-exporter-alert-rules
+          mountPath: /etc/prometheus/rules/power-exporter
+        - name: claude-code-alert-rules
+          mountPath: /etc/prometheus/rules/claude-code
+        - name: k3s-alert-rules
+          mountPath: /etc/prometheus/rules/k3s
+        - name: odin-stack-alert-rules
+          mountPath: /etc/prometheus/rules/odin-stack
+        - name: anomaly-alert-rules
+          mountPath: /etc/prometheus/rules/anomaly
+        - name: storage
+          mountPath: /prometheus
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: gpu-alert-rules
+        configMap:
+          name: gpu-alert-rules
+      - name: power-exporter-alert-rules
+        configMap:
+          name: power-exporter-alert-rules
+      - name: claude-code-alert-rules
+        configMap:
+          name: claude-code-alert-rules
+      - name: k3s-alert-rules
+        configMap:
+          name: k3s-alert-rules
+      - name: odin-stack-alert-rules
+        configMap:
+          name: odin-stack-alert-rules
+      - name: anomaly-alert-rules
+        configMap:
+          name: anomaly-alert-rules
+      - name: storage
+        persistentVolumeClaim:
+          claimName: prometheus-pvc

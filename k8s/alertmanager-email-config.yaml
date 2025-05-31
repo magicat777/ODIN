@@ -1,0 +1,330 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config-email
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      # SMTP configuration - update these with your email provider details
+      smtp_smarthost: 'smtp.gmail.com:587'  # Change to your SMTP server
+      smtp_from: 'odin-monitoring@your-domain.com'  # Change to your email
+      smtp_auth_username: 'your-email@gmail.com'  # Change to your email
+      smtp_auth_password_file: '/etc/alertmanager/smtp-password'
+      smtp_require_tls: true
+      
+    # Templates for notifications
+    templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+    
+    route:
+      # Default receiver for all alerts
+      receiver: 'default-receiver'
+      
+      # Group alerts by these labels
+      group_by: ['alertname', 'cluster', 'service', 'component']
+      
+      # Wait before sending grouped notifications
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      
+      # Child routes for specific alert routing
+      routes:
+      # PERSISTENT ALERTS - Email after 15 minutes
+      - match_re:
+          alertname: '.*'
+        receiver: 'persistent-email'
+        group_wait: 15m  # Wait 15 minutes before first email
+        group_interval: 15m
+        repeat_interval: 4h  # Repeat every 4 hours if still firing
+        continue: true  # Continue to other routes as well
+        
+      # Critical alerts - immediate notification (webhook + email)
+      - match:
+          severity: critical
+        receiver: 'critical-immediate'
+        group_wait: 0s
+        repeat_interval: 1h
+        
+      # K3s specific alerts
+      - match:
+          component: k3s
+        receiver: 'k3s-receiver'
+        group_by: ['alertname', 'service']
+        
+      # GPU alerts
+      - match:
+          component: gpu
+        receiver: 'gpu-receiver'
+        group_by: ['alertname', 'gpu']
+        
+      # Monitoring stack alerts
+      - match:
+          component: monitoring-stack
+        receiver: 'monitoring-receiver'
+        group_by: ['alertname', 'service']
+        
+      # Claude Code alerts
+      - match:
+          component: claude-code
+        receiver: 'claude-receiver'
+        group_by: ['alertname']
+        repeat_interval: 24h
+        
+      # Power/thermal alerts - immediate email for thermal issues
+      - match_re:
+          alertname: '.*Power.*|.*Thermal.*|.*Temperature.*|.*Battery.*'
+        receiver: 'power-email'
+        group_wait: 30s
+        
+    receivers:
+    # Persistent alerts email receiver (15+ minutes)
+    - name: 'persistent-email'
+      email_configs:
+      - to: 'admin@your-domain.com'  # Change to your email
+        subject: '[ODIN PERSISTENT] {{ template "odin.email.subject" . }}'
+        body: |
+          {{ template "odin.email.body" . }}
+          
+          ⚠️  ALERT DURATION: This alert has been active for more than 15 minutes.
+          
+          📊 Grafana Dashboard: http://localhost:31494
+          🔧 Prometheus: http://localhost:31493
+        headers:
+          X-ODIN-Alert-Type: persistent
+          X-ODIN-Duration: 15min+
+        
+    # Critical alerts - immediate webhook + email
+    - name: 'critical-immediate'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/critical'
+        send_resolved: true
+      email_configs:
+      - to: 'admin@your-domain.com'  # Change to your email
+        subject: '[ODIN CRITICAL] {{ template "odin.email.subject" . }}'
+        body: |
+          🚨 CRITICAL ALERT DETECTED 🚨
+          
+          {{ template "odin.email.body" . }}
+          
+          This is a critical system alert requiring immediate attention.
+        headers:
+          X-ODIN-Alert-Type: critical
+          X-ODIN-Priority: high
+          
+    # Power/thermal immediate email
+    - name: 'power-email'
+      email_configs:
+      - to: 'admin@your-domain.com'  # Change to your email
+        subject: '[ODIN THERMAL] {{ template "odin.email.subject" . }}'
+        body: |
+          🌡️  THERMAL/POWER ALERT
+          
+          {{ template "odin.email.body" . }}
+          
+          GPU/System thermal monitoring detected an issue.
+        headers:
+          X-ODIN-Alert-Type: thermal
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/power'
+        send_resolved: true
+        
+    # Default receiver - logs to stdout
+    - name: 'default-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/webhook'
+        send_resolved: true
+        
+    # K3s alerts receiver
+    - name: 'k3s-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/k3s'
+        send_resolved: true
+        
+    # GPU alerts receiver
+    - name: 'gpu-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/gpu'
+        send_resolved: true
+        
+    # Monitoring stack receiver
+    - name: 'monitoring-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/monitoring'
+        send_resolved: true
+        
+    # Claude Code receiver
+    - name: 'claude-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/claude'
+        send_resolved: true
+        
+    # Inhibition rules
+    inhibit_rules:
+    # If K3s API server is down, inhibit other K3s component alerts
+    - source_match:
+        alertname: 'K3sAPIServerDown'
+      target_match_re:
+        component: 'k3s'
+      equal: ['cluster']
+      
+    # If Prometheus is down, inhibit target down alerts
+    - source_match:
+        alertname: 'PrometheusDown'
+      target_match:
+        alertname: 'PrometheusTargetDown'
+      equal: ['instance']
+      
+    # If node is not ready, inhibit pod alerts on that node
+    - source_match:
+        alertname: 'NodeNotReady'
+      target_match_re:
+        alertname: 'Pod.*'
+      equal: ['node']
+      
+    # If monitoring stack is critical, inhibit warning alerts
+    - source_match:
+        alertname: 'MonitoringStackCritical'
+      target_match:
+        component: 'monitoring-stack'
+        severity: 'warning'
+        
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-email-templates
+  namespace: monitoring
+data:
+  email.tmpl: |
+    {{ define "odin.email.subject" }}
+    [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] ODIN Alert - {{ .GroupLabels.alertname }}
+    {{ end }}
+    
+    {{ define "odin.email.body" }}
+    <h2>🔔 ODIN Monitoring Alert</h2>
+    
+    <p><strong>Status:</strong> {{ .Status | toUpper }}</p>
+    <p><strong>Time:</strong> {{ .CommonAnnotations.timestamp | default "N/A" }}</p>
+    
+    {{ if eq .Status "firing" }}
+    <h3>🔥 Firing Alerts ({{ .Alerts.Firing | len }})</h3>
+    {{ range .Alerts.Firing }}
+    <div style="border-left: 4px solid #ff4444; padding-left: 10px; margin: 10px 0;">
+      <h4>{{ .Annotations.summary }}</h4>
+      <p><strong>Severity:</strong> {{ .Labels.severity | default "unknown" }}</p>
+      <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+      <p><strong>Component:</strong> {{ .Labels.component | default .Labels.job }}</p>
+      <p><strong>Instance:</strong> {{ .Labels.instance }}</p>
+      <p><strong>Started:</strong> {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}</p>
+      <p><strong>Source:</strong> <a href="{{ .GeneratorURL }}">View in Prometheus</a></p>
+    </div>
+    {{ end }}
+    {{ end }}
+    
+    {{ if eq .Status "resolved" }}
+    <h3>✅ Resolved Alerts ({{ .Alerts.Resolved | len }})</h3>
+    {{ range .Alerts.Resolved }}
+    <div style="border-left: 4px solid #44ff44; padding-left: 10px; margin: 10px 0;">
+      <h4>{{ .Annotations.summary }}</h4>
+      <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+      <p><strong>Resolved:</strong> {{ .EndsAt.Format "2006-01-02 15:04:05 MST" }}</p>
+      <p><strong>Duration:</strong> {{ .EndsAt.Sub .StartsAt }}</p>
+    </div>
+    {{ end }}
+    {{ end }}
+    
+    <hr>
+    <p><small>
+    <strong>ODIN Monitoring System</strong><br>
+    Grafana: <a href="http://localhost:31494">http://localhost:31494</a><br>
+    Prometheus: <a href="http://localhost:31493">http://localhost:31493</a><br>
+    AlertManager: <a href="http://localhost:31495">http://localhost:31495</a>
+    </small></p>
+    {{ end }}
+---
+# SMTP Secret for email authentication
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-smtp-secret
+  namespace: monitoring
+type: Opaque
+data:
+  smtp-password: ZGhtdyBmeHB1IHpoeWYgb2Fjdw==  # This is your existing Gmail app password
+---
+# Updated AlertManager deployment with email support
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.25.0
+        args:
+          - '--config.file=/etc/alertmanager/alertmanager.yml'
+          - '--storage.path=/alertmanager'
+          - '--web.external-url=http://localhost:31495'
+          - '--web.route-prefix=/'
+          - '--cluster.advertise-address=0.0.0.0:9093'
+          - '--log.level=info'
+        ports:
+        - containerPort: 9093
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager
+          readOnly: true
+        - name: templates
+          mountPath: /etc/alertmanager/templates
+          readOnly: true
+        - name: smtp-secret
+          mountPath: /etc/alertmanager/smtp-password
+          subPath: smtp-password
+          readOnly: true
+        - name: storage
+          mountPath: /alertmanager
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9093
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: alertmanager-config-email
+      - name: templates
+        configMap:
+          name: alertmanager-email-templates
+      - name: smtp-secret
+        secret:
+          secretName: alertmanager-smtp-secret
+      - name: storage
+        persistentVolumeClaim:
+          claimName: alertmanager-pvc

@@ -1,0 +1,698 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-pod-anomaly-detector-script
+  namespace: monitoring
+data:
+  k8s_pod_anomaly_detector.py: |
+    #!/usr/bin/env python3
+    import time
+    import numpy as np
+    import pandas as pd
+    from datetime import datetime, timedelta
+    import requests
+    import logging
+    import json
+    import os
+    import pickle
+    import threading
+    from prometheus_client import start_http_server, Gauge, Counter, Histogram
+    from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import StandardScaler
+    from kubernetes import client, config
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import warnings
+    warnings.filterwarnings('ignore')
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger('k8s-pod-anomaly-detector')
+    
+    # Prometheus metrics
+    pod_anomaly_score = Gauge('k8s_pod_anomaly_score', 'Pod anomaly score', ['namespace', 'pod', 'metric_type', 'algorithm'])
+    pod_restart_anomaly = Gauge('k8s_pod_restart_anomaly_score', 'Pod restart frequency anomaly', ['namespace', 'pod'])
+    pod_resource_anomaly = Gauge('k8s_pod_resource_anomaly_score', 'Pod resource usage anomaly', ['namespace', 'pod', 'resource'])
+    pod_lifecycle_anomaly = Gauge('k8s_pod_lifecycle_anomaly_score', 'Pod lifecycle anomaly', ['namespace', 'pod'])
+    model_training_duration = Histogram('k8s_anomaly_model_training_duration_seconds', 'Model training duration')
+    model_updates = Counter('k8s_anomaly_model_updates_total', 'Total model updates', ['metric_type'])
+    detection_errors = Counter('k8s_anomaly_detection_errors_total', 'Total detection errors', ['metric_type'])
+    health_status = Gauge('k8s_anomaly_detector_health', 'Health status of K8s anomaly detector')
+    metrics_processed = Counter('k8s_anomaly_metrics_processed_total', 'Total metrics processed', ['metric_type'])
+    
+    # Configuration
+    PROMETHEUS_URL = os.getenv('PROMETHEUS_URL', 'http://prometheus:9090')
+    MODEL_PATH = '/models'
+    UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', '60'))  # 1 minute
+    TRAINING_WINDOW = os.getenv('TRAINING_WINDOW', '7d')
+    
+    # K8s Pod Metrics Configuration
+    POD_METRICS = [
+        {
+            'name': 'cpu_usage',
+            'query': 'rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.1,
+            'min_samples': 50
+        },
+        {
+            'name': 'memory_usage',
+            'query': 'container_memory_working_set_bytes{container!="",container!="POD"}',
+            'algorithm': 'isolation_forest', 
+            'sensitivity': 0.1,
+            'min_samples': 50
+        },
+        {
+            'name': 'restart_rate',
+            'query': 'increase(kube_pod_container_status_restarts_total[1h])',
+            'algorithm': 'statistical',
+            'z_threshold': 2,
+            'min_samples': 20
+        },
+        {
+            'name': 'pod_ready_time',
+            'query': 'time() - kube_pod_status_ready_time',
+            'algorithm': 'statistical',
+            'z_threshold': 3,
+            'min_samples': 30
+        },
+        {
+            'name': 'container_oom_kills',
+            'query': 'increase(container_oom_events_total[1h])',
+            'algorithm': 'statistical', 
+            'z_threshold': 1,
+            'min_samples': 10
+        },
+        {
+            'name': 'network_rx_errors',
+            'query': 'rate(container_network_receive_errors_total[5m])',
+            'algorithm': 'statistical',
+            'z_threshold': 2,
+            'min_samples': 20
+        },
+        {
+            'name': 'network_tx_errors', 
+            'query': 'rate(container_network_transmit_errors_total[5m])',
+            'algorithm': 'statistical',
+            'z_threshold': 2,
+            'min_samples': 20
+        }
+    ]
+    
+    # Global health status
+    health_info = {
+        'healthy': True,
+        'last_update': datetime.now(),
+        'errors': [],
+        'k8s_available': False,
+        'prometheus_available': False
+    }
+    
+    class HealthCheckHandler(BaseHTTPRequestHandler):
+        """HTTP handler for health checks"""
+        def do_GET(self):
+            if self.path == '/health':
+                self.send_health_response()
+            elif self.path == '/healthz':
+                self.send_healthz_response()
+            elif self.path == '/ready':
+                self.send_ready_response()
+            else:
+                self.send_error(404)
+        
+        def send_health_response(self):
+            """Detailed health check response"""
+            status_code = 200 if health_info['healthy'] else 503
+            response = {
+                'status': 'healthy' if status_code == 200 else 'unhealthy',
+                'timestamp': datetime.now().isoformat(),
+                'k8s_available': health_info['k8s_available'],
+                'prometheus_available': health_info['prometheus_available'],
+                'last_update': health_info['last_update'].isoformat()
+            }
+            
+            if health_info['errors']:
+                response['recent_errors'] = health_info['errors'][-5:]
+                
+            self.send_response(status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            import json
+            self.wfile.write(json.dumps(response).encode())
+        
+        def send_healthz_response(self):
+            """Simple health check for k8s"""
+            if health_info['healthy']:
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'OK')
+            else:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(b'Unhealthy')
+        
+        def send_ready_response(self):
+            """Readiness check"""
+            now = datetime.now()
+            if (now - health_info['last_update'] < timedelta(minutes=2) and 
+                health_info['k8s_available'] and health_info['prometheus_available']):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'Ready')
+            else:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(b'Not Ready')
+        
+        def log_message(self, format, *args):
+            # Suppress access logs
+            pass
+    
+    def run_health_server():
+        """Run the health check HTTP server"""
+        server = HTTPServer(('', 8080), HealthCheckHandler)
+        server.serve_forever()
+    
+    class K8sPodAnomalyDetector:
+        def __init__(self):
+            self.models = {}
+            self.scalers = {}
+            self.thresholds = {}
+            self.k8s_client = None
+            os.makedirs(MODEL_PATH, exist_ok=True)
+            
+            # Initialize Kubernetes client
+            try:
+                config.load_incluster_config()
+                self.k8s_client = client.CoreV1Api()
+                health_info['k8s_available'] = True
+                logger.info("Kubernetes client initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize Kubernetes client: {e}")
+                health_info['k8s_available'] = False
+                health_info['errors'].append(f"K8s init error: {str(e)}")
+                
+            self.load_models()
+            
+        def load_models(self):
+            """Load saved models from disk"""
+            for metric in POD_METRICS:
+                model_file = os.path.join(MODEL_PATH, f"k8s_{metric['name'].replace('/', '_')}.pkl")
+                if os.path.exists(model_file):
+                    try:
+                        with open(model_file, 'rb') as f:
+                            data = pickle.load(f)
+                            self.models[metric['name']] = data['model']
+                            self.scalers[metric['name']] = data.get('scaler')
+                            self.thresholds[metric['name']] = data.get('thresholds', {})
+                            logger.info(f"Loaded K8s model for {metric['name']}")
+                    except Exception as e:
+                        logger.error(f"Failed to load K8s model for {metric['name']}: {e}")
+                        
+        def save_model(self, metric_name):
+            """Save model to disk"""
+            if metric_name in self.models:
+                model_file = os.path.join(MODEL_PATH, f"k8s_{metric_name.replace('/', '_')}.pkl")
+                try:
+                    with open(model_file, 'wb') as f:
+                        pickle.dump({
+                            'model': self.models[metric_name],
+                            'scaler': self.scalers.get(metric_name),
+                            'thresholds': self.thresholds.get(metric_name, {})
+                        }, f)
+                    logger.info(f"Saved K8s model for {metric_name}")
+                except Exception as e:
+                    logger.error(f"Failed to save K8s model for {metric_name}: {e}")
+                    
+        def query_prometheus(self, query, start_time=None, end_time=None, step='60s'):
+            """Query Prometheus for metric data"""
+            if not start_time:
+                end_time = datetime.now()
+                start_time = end_time - timedelta(days=7)
+                
+            params = {
+                'query': query,
+                'start': start_time.timestamp(),
+                'end': end_time.timestamp(),
+                'step': step
+            }
+            
+            try:
+                response = requests.get(f"{PROMETHEUS_URL}/api/v1/query_range", params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                
+                health_info['prometheus_available'] = True
+                
+                if data['status'] == 'success' and data['data']['result']:
+                    # Process multiple time series
+                    all_data = []
+                    for result in data['data']['result']:
+                        for timestamp, value in result['values']:
+                            row = {'timestamp': float(timestamp), 'value': float(value)}
+                            # Add labels as additional features
+                            for label, label_value in result['metric'].items():
+                                if label not in ['__name__', 'instance', 'job']:
+                                    row[label] = label_value
+                            all_data.append(row)
+                    
+                    if all_data:
+                        return pd.DataFrame(all_data)
+                        
+            except Exception as e:
+                logger.error(f"Failed to query Prometheus: {e}")
+                health_info['prometheus_available'] = False
+                health_info['errors'].append(f"Prometheus error: {str(e)}")
+                detection_errors.labels(metric_type=query).inc()
+                
+            return pd.DataFrame()
+            
+        def query_instant(self, query):
+            """Query Prometheus for instant values"""
+            try:
+                response = requests.get(f"{PROMETHEUS_URL}/api/v1/query", params={'query': query}, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                
+                health_info['prometheus_available'] = True
+                
+                if data['status'] == 'success' and data['data']['result']:
+                    results = []
+                    for result in data['data']['result']:
+                        row = {
+                            'value': float(result['value'][1]),
+                            'labels': result['metric']
+                        }
+                        results.append(row)
+                    return results
+                    
+            except Exception as e:
+                logger.error(f"Failed to query instant value: {e}")
+                health_info['prometheus_available'] = False
+                
+            return []
+            
+        def get_pod_info(self):
+            """Get current pod information from K8s API"""
+            if not self.k8s_client:
+                return []
+                
+            try:
+                pods = self.k8s_client.list_pod_for_all_namespaces()
+                pod_info = []
+                
+                for pod in pods.items:
+                    info = {
+                        'name': pod.metadata.name,
+                        'namespace': pod.metadata.namespace,
+                        'phase': pod.status.phase,
+                        'creation_time': pod.metadata.creation_timestamp,
+                        'restart_count': sum([container.restart_count or 0 
+                                            for container in pod.status.container_statuses or []]),
+                        'ready': all([condition.status == "True" 
+                                    for condition in pod.status.conditions or [] 
+                                    if condition.type == "Ready"])
+                    }
+                    pod_info.append(info)
+                    
+                health_info['k8s_available'] = True
+                return pod_info
+                
+            except Exception as e:
+                logger.error(f"Failed to get pod info: {e}")
+                health_info['k8s_available'] = False
+                health_info['errors'].append(f"K8s API error: {str(e)}")
+                return []
+            
+        def train_isolation_forest(self, metric_config, data):
+            """Train Isolation Forest model for K8s metrics"""
+            if len(data) < metric_config['min_samples']:
+                logger.warning(f"Insufficient data for K8s {metric_config['name']}: {len(data)} samples")
+                return None, None
+                
+            # Prepare features - include pod metadata
+            feature_cols = ['value']
+            if 'namespace' in data.columns:
+                # Convert categorical to numeric
+                data['namespace_hash'] = pd.Categorical(data['namespace']).codes
+                feature_cols.append('namespace_hash')
+            if 'pod' in data.columns:
+                data['pod_hash'] = pd.Categorical(data['pod']).codes
+                feature_cols.append('pod_hash')
+                
+            # Add time-based features
+            data['hour'] = pd.to_datetime(data['timestamp'], unit='s').dt.hour
+            data['dayofweek'] = pd.to_datetime(data['timestamp'], unit='s').dt.dayofweek
+            feature_cols.extend(['hour', 'dayofweek'])
+            
+            X = data[feature_cols].values
+            
+            # Scale features
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            
+            # Train model
+            model = IsolationForest(
+                contamination=metric_config['sensitivity'],
+                random_state=42,
+                n_estimators=100
+            )
+            
+            with model_training_duration.time():
+                model.fit(X_scaled)
+                
+            model_updates.labels(metric_type=metric_config['name']).inc()
+            
+            return model, scaler
+            
+        def train_statistical_model(self, metric_config, data):
+            """Train statistical anomaly detection model"""
+            if len(data) < metric_config['min_samples']:
+                logger.warning(f"Insufficient data for K8s {metric_config['name']}: {len(data)} samples")
+                return None
+                
+            values = data['value'].values
+            
+            # Calculate statistics per pod/namespace if available
+            thresholds = {
+                'global': {
+                    'mean': np.mean(values),
+                    'std': np.std(values),
+                    'p99': np.percentile(values, 99),
+                    'p95': np.percentile(values, 95),
+                    'p05': np.percentile(values, 5),
+                    'p01': np.percentile(values, 1)
+                }
+            }
+            
+            # Per-namespace thresholds if namespace data available
+            if 'namespace' in data.columns:
+                thresholds['per_namespace'] = {}
+                for ns in data['namespace'].unique():
+                    ns_data = data[data['namespace'] == ns]['value'].values
+                    if len(ns_data) >= 10:  # Minimum samples per namespace
+                        thresholds['per_namespace'][ns] = {
+                            'mean': np.mean(ns_data),
+                            'std': np.std(ns_data),
+                            'p95': np.percentile(ns_data, 95)
+                        }
+            
+            model_updates.labels(metric_type=metric_config['name']).inc()
+            
+            return thresholds
+            
+        def detect_pod_anomalies(self, metric_config):
+            """Detect anomalies for K8s pod metrics"""
+            try:
+                # Query current values
+                current_results = self.query_instant(metric_config['query'])
+                
+                if not current_results:
+                    logger.debug(f"No data for K8s {metric_config['name']}")
+                    return
+                    
+                for result in current_results:
+                    current_value = result['value']
+                    labels = result['labels']
+                    
+                    # Extract pod and namespace from labels
+                    namespace = labels.get('namespace', 'unknown')
+                    pod = labels.get('pod', labels.get('container', 'unknown'))
+                    
+                    metrics_processed.labels(metric_type=metric_config['name']).inc()
+                    
+                    if metric_config['algorithm'] == 'isolation_forest':
+                        if metric_config['name'] in self.models:
+                            model = self.models[metric_config['name']]
+                            scaler = self.scalers[metric_config['name']]
+                            
+                            # Prepare features
+                            now = datetime.now()
+                            hour = now.hour
+                            dayofweek = now.weekday()
+                            
+                            # Create feature vector matching training
+                            features = [current_value, hour, dayofweek]
+                            # Add namespace/pod hashes if model was trained with them
+                            X = np.array([features])
+                            X_scaled = scaler.transform(X)
+                            
+                            # Get anomaly score
+                            score = model.decision_function(X_scaled)[0]
+                            normalized_score = 50 + (score * 50)
+                            normalized_score = max(0, min(100, normalized_score))
+                            
+                            pod_anomaly_score.labels(
+                                namespace=namespace,
+                                pod=pod,
+                                metric_type=metric_config['name'],
+                                algorithm='isolation_forest'
+                            ).set(100 - normalized_score)
+                            
+                            logger.debug(f"K8s {metric_config['name']} [{namespace}/{pod}]: value={current_value}, score={100-normalized_score}")
+                            
+                    elif metric_config['algorithm'] == 'statistical':
+                        if metric_config['name'] in self.thresholds:
+                            thresholds = self.thresholds[metric_config['name']]
+                            
+                            # Use namespace-specific thresholds if available
+                            threshold_data = thresholds['global']
+                            if ('per_namespace' in thresholds and 
+                                namespace in thresholds['per_namespace']):
+                                threshold_data = thresholds['per_namespace'][namespace]
+                            
+                            # Calculate z-score
+                            z_score = abs((current_value - threshold_data['mean']) / (threshold_data['std'] + 1e-10))
+                            
+                            # Convert to 0-100 scale
+                            score = min(100, (z_score / metric_config['z_threshold']) * 100)
+                            
+                            pod_anomaly_score.labels(
+                                namespace=namespace,
+                                pod=pod,
+                                metric_type=metric_config['name'],
+                                algorithm='statistical'
+                            ).set(score)
+                            
+                            logger.debug(f"K8s {metric_config['name']} [{namespace}/{pod}]: value={current_value}, z-score={z_score}, score={score}")
+                        
+            except Exception as e:
+                logger.error(f"Error detecting K8s anomalies for {metric_config['name']}: {e}")
+                detection_errors.labels(metric_type=metric_config['name']).inc()
+                
+        def update_models(self):
+            """Update all K8s anomaly detection models"""
+            logger.info("Updating K8s anomaly detection models...")
+            
+            for metric_config in POD_METRICS:
+                try:
+                    # Query training data
+                    training_data = self.query_prometheus(metric_config['query'])
+                    
+                    if training_data.empty:
+                        logger.warning(f"No training data for K8s {metric_config['name']}")
+                        continue
+                        
+                    if metric_config['algorithm'] == 'isolation_forest':
+                        model, scaler = self.train_isolation_forest(metric_config, training_data)
+                        if model:
+                            self.models[metric_config['name']] = model
+                            self.scalers[metric_config['name']] = scaler
+                            self.save_model(metric_config['name'])
+                            
+                    elif metric_config['algorithm'] == 'statistical':
+                        thresholds = self.train_statistical_model(metric_config, training_data)
+                        if thresholds:
+                            self.thresholds[metric_config['name']] = thresholds
+                            self.save_model(metric_config['name'])
+                            
+                    logger.info(f"Updated K8s model for {metric_config['name']}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to update K8s model for {metric_config['name']}: {e}")
+                    health_info['errors'].append(f"Model update error: {str(e)}")
+                    
+        def run(self):
+            """Main K8s anomaly detection loop"""
+            # Initial model training
+            self.update_models()
+            
+            last_model_update = time.time()
+            
+            while True:
+                try:
+                    # Detect anomalies for all metrics
+                    for metric_config in POD_METRICS:
+                        self.detect_pod_anomalies(metric_config)
+                        
+                    # Update models periodically (every 6 hours)
+                    if time.time() - last_model_update > 21600:
+                        self.update_models()
+                        last_model_update = time.time()
+                        
+                    # Update health status
+                    health_info['healthy'] = (health_info['k8s_available'] and 
+                                            health_info['prometheus_available'])
+                    health_info['last_update'] = datetime.now()
+                    health_status.set(1 if health_info['healthy'] else 0)
+                    
+                    time.sleep(UPDATE_INTERVAL)
+                    
+                except Exception as e:
+                    logger.error(f"Error in K8s anomaly detection loop: {e}")
+                    health_info['healthy'] = False
+                    health_info['errors'].append(f"Main loop error: {str(e)}")
+                    health_status.set(0)
+                    time.sleep(60)
+    
+    def main():
+        # Start Prometheus metrics server
+        start_http_server(9406)
+        logger.info("Started K8s anomaly detection metrics server on port 9406")
+        
+        # Start health check server in a separate thread
+        health_thread = threading.Thread(target=run_health_server, daemon=True)
+        health_thread.start()
+        logger.info("Started health check server on port 8080")
+        
+        # Start K8s anomaly detector
+        detector = K8sPodAnomalyDetector()
+        detector.run()
+    
+    if __name__ == '__main__':
+        main()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-pod-anomaly-detector
+  namespace: monitoring
+  labels:
+    app: k8s-pod-anomaly-detector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-pod-anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: k8s-pod-anomaly-detector
+    spec:
+      serviceAccountName: k8s-anomaly-detector
+      containers:
+      - name: k8s-pod-anomaly-detector
+        image: python:3.11-slim
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          apt-get update && apt-get install -y gcc g++ && \
+          pip install --no-cache-dir -r /requirements/requirements.txt && \
+          python /app/k8s_pod_anomaly_detector.py
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus:9090"
+        - name: UPDATE_INTERVAL
+          value: "60"  # 1 minute updates
+        - name: TRAINING_WINDOW
+          value: "7d"
+        ports:
+        - containerPort: 9406
+          name: metrics
+        - containerPort: 8080
+          name: health
+        volumeMounts:
+        - name: script
+          mountPath: /app
+        - name: requirements
+          mountPath: /requirements
+        - name: models
+          mountPath: /models
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: script
+        configMap:
+          name: k8s-pod-anomaly-detector-script
+          defaultMode: 0755
+      - name: requirements
+        configMap:
+          name: anomaly-detector-requirements
+      - name: models
+        persistentVolumeClaim:
+          claimName: anomaly-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-pod-anomaly-detector
+  namespace: monitoring
+  labels:
+    app: k8s-pod-anomaly-detector
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9406"
+    prometheus.io/path: "/metrics"
+spec:
+  ports:
+  - port: 9406
+    targetPort: 9406
+    name: metrics
+  - port: 8080
+    targetPort: 8080
+    name: health
+  selector:
+    app: k8s-pod-anomaly-detector
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-anomaly-detector
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-anomaly-detector
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes", "namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-anomaly-detector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-anomaly-detector
+subjects:
+- kind: ServiceAccount
+  name: k8s-anomaly-detector
+  namespace: monitoring

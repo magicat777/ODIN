@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcp-network-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+data:
+  tcp-alerts.yaml: |
+    groups:
+    - name: tcp_connection_alerts
+      interval: 30s
+      rules:
+      
+      # TCP Reset Alerts
+      - alert: HighTCPResetRate
+        expr: rate(node_netstat_Tcp_OutRsts[5m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High TCP reset rate detected"
+          description: "TCP reset rate is {{ $value | humanize }} resets/sec on {{ $labels.instance }}, indicating potential connection issues"
+          
+      - alert: ExcessiveTCPResetRate
+        expr: rate(node_netstat_Tcp_OutRsts[5m]) > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Excessive TCP reset rate"
+          description: "TCP reset rate is {{ $value | humanize }} resets/sec on {{ $labels.instance }}, indicating severe connection problems"
+          
+      - alert: HighTCPResetPercentage
+        expr: |
+          (rate(node_netstat_Tcp_OutRsts[5m]) / rate(node_netstat_Tcp_ActiveOpens[5m])) * 100 > 20
+          and rate(node_netstat_Tcp_ActiveOpens[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High percentage of TCP connections being reset"
+          description: "{{ $value | humanize }}% of TCP connections are being reset on {{ $labels.instance }}"
+          
+      # TCP Retransmission Alerts
+      - alert: HighTCPRetransmissionRate
+        expr: |
+          (rate(node_netstat_Tcp_RetransSegs[5m]) / rate(node_netstat_Tcp_OutSegs[5m])) * 100 > 1
+          and rate(node_netstat_Tcp_OutSegs[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High TCP retransmission rate"
+          description: "{{ $value | humanize }}% of TCP segments are being retransmitted on {{ $labels.instance }}, indicating network quality issues"
+          
+      # TCP Connection Failures
+      - alert: HighTCPConnectionFailures
+        expr: |
+          rate(node_netstat_Tcp_AttemptFails[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High TCP connection failure rate"
+          description: "TCP connection failures at {{ $value | humanize }} failures/sec on {{ $labels.instance }}"
+          
+      # TCP Listen Overflows (dropped connections due to full queue)
+      - alert: TCPListenOverflows
+        expr: rate(node_netstat_Tcp_ListenOverflows[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TCP listen queue overflowing"
+          description: "TCP listen queue is overflowing at {{ $value | humanize }} drops/sec on {{ $labels.instance }}. Application may be overwhelmed."
+          
+      # TCP Congestion Detection
+      - alert: TCPCongestionDetected
+        expr: |
+          (rate(node_netstat_Tcp_OutRsts[5m]) > 1) 
+          and (rate(node_netstat_Tcp_RetransSegs[5m]) / rate(node_netstat_Tcp_OutSegs[5m]) * 100 > 0.5)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TCP congestion detected"
+          description: "High reset rate ({{ $values.A | humanize }}/sec) combined with retransmissions indicates network congestion on {{ $labels.instance }}"

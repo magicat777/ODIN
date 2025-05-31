@@ -1,0 +1,272 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-monitoring-dashboard
+  namespace: monitoring
+data:
+  gpu-monitoring.json: |
+    {
+      "id": null,
+      "uid": "gpu-monitoring-v2",
+      "title": "GPU Monitoring - RTX 4080",
+      "tags": ["gpu", "nvidia", "performance"],
+      "timezone": "browser",
+      "schemaVersion": 30,
+      "version": 1,
+      "refresh": "10s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "type": "timeseries",
+          "title": "GPU Temperature",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_temperature_celsius",
+              "legendFormat": "{{name}} (GPU {{gpu}})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "decimals": 1,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "orange", "value": 80},
+                  {"color": "red", "value": 90}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "type": "timeseries",
+          "title": "GPU Power Consumption",
+          "targets": [
+            {
+              "expr": "node_gpu_power_watts",
+              "legendFormat": "GPU {{gpu}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "decimals": 1,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 100},
+                  {"color": "orange", "value": 150},
+                  {"color": "red", "value": 200}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "type": "timeseries",
+          "title": "GPU Memory Usage",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_memory_used_mb",
+              "legendFormat": "Used - {{name}}"
+            },
+            {
+              "expr": "nvidia_gpu_memory_total_mb",
+              "legendFormat": "Total - {{name}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decmbytes",
+              "decimals": 0,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "type": "timeseries",
+          "title": "GPU Utilization",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_utilization_percent",
+              "legendFormat": "{{name}} (GPU {{gpu}})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 1,
+              "min": 0,
+              "max": 100,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "showPoints": "never"
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "gridPos": {"h": 6, "w": 6, "x": 0, "y": 16},
+          "type": "gauge",
+          "title": "Current GPU Temperature",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_temperature_celsius",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "orange", "value": 80},
+                  {"color": "red", "value": 90}
+                ]
+              }
+            }
+          },
+          "options": {
+            "orientation": "auto",
+            "showThresholdLabels": true,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 6,
+          "gridPos": {"h": 6, "w": 6, "x": 6, "y": 16},
+          "type": "gauge",
+          "title": "Current GPU Power",
+          "targets": [
+            {
+              "expr": "node_gpu_power_watts",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "decimals": 0,
+              "min": 0,
+              "max": 250,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 100},
+                  {"color": "orange", "value": 150},
+                  {"color": "red", "value": 200}
+                ]
+              }
+            }
+          },
+          "options": {
+            "orientation": "auto",
+            "showThresholdLabels": true,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 7,
+          "gridPos": {"h": 6, "w": 6, "x": 12, "y": 16},
+          "type": "stat",
+          "title": "GPU Memory Used",
+          "targets": [
+            {
+              "expr": "(nvidia_gpu_memory_used_mb / nvidia_gpu_memory_total_mb) * 100",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "orange", "value": 85},
+                  {"color": "red", "value": 95}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "auto"
+          }
+        },
+        {
+          "id": 8,
+          "gridPos": {"h": 6, "w": 6, "x": 18, "y": 16},
+          "type": "timeseries",
+          "title": "GPU Fan Speed",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_fan_speed_percent",
+              "legendFormat": "Fan Speed %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 0,
+              "min": 0,
+              "max": 100,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            }
+          }
+        }
+      ]
+    }

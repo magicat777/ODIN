@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-healthcheck
+  namespace: monitoring
+data:
+  healthcheck.sh: |
+    #!/bin/bash
+    # Health check script for monitoring stack
+    
+    echo "=== ODIN Monitoring Stack Health Check ==="
+    echo "Timestamp: $(date)"
+    echo ""
+    
+    # Check Prometheus
+    echo "Checking Prometheus..."
+    if curl -s http://prometheus:9090/-/healthy > /dev/null; then
+        echo "✓ Prometheus is healthy"
+    else
+        echo "✗ Prometheus is unhealthy"
+        kubectl rollout restart deployment/prometheus -n monitoring
+    fi
+    
+    # Check Grafana
+    echo "Checking Grafana..."
+    if curl -s http://grafana:3000/api/health > /dev/null; then
+        echo "✓ Grafana is healthy"
+    else
+        echo "✗ Grafana is unhealthy"
+        kubectl rollout restart deployment/grafana -n monitoring
+    fi
+    
+    # Check Loki
+    echo "Checking Loki..."
+    if curl -s http://loki:3100/ready > /dev/null; then
+        echo "✓ Loki is healthy"
+    else
+        echo "✗ Loki is unhealthy"
+        kubectl rollout restart deployment/loki -n monitoring
+    fi
+    
+    # Check AlertManager
+    echo "Checking AlertManager..."
+    if curl -s http://alertmanager:9093/-/healthy > /dev/null; then
+        echo "✓ AlertManager is healthy"
+    else
+        echo "✗ AlertManager is unhealthy"
+        kubectl rollout restart deployment/alertmanager -n monitoring
+    fi
+    
+    echo ""
+    echo "=== Pod Status ==="
+    kubectl get pods -n monitoring
+    
+    echo ""
+    echo "=== Resource Usage ==="
+    kubectl top pods -n monitoring --no-headers | head -10
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: monitoring-healthcheck
+  namespace: monitoring
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: monitoring-healthcheck
+          containers:
+          - name: healthcheck
+            image: curlimages/curl:latest
+            command:
+            - /bin/sh
+            - /scripts/healthcheck.sh
+            volumeMounts:
+            - name: healthcheck-script
+              mountPath: /scripts
+            resources:
+              requests:
+                memory: "64Mi"
+                cpu: "50m"
+              limits:
+                memory: "128Mi"
+                cpu: "100m"
+          volumes:
+          - name: healthcheck-script
+            configMap:
+              name: monitoring-healthcheck
+              defaultMode: 0755
+          restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: monitoring-healthcheck
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: monitoring-healthcheck
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "patch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: monitoring-healthcheck
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: monitoring-healthcheck
+subjects:
+- kind: ServiceAccount
+  name: monitoring-healthcheck
+  namespace: monitoring

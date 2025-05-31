@@ -1,0 +1,447 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ml-comprehensive-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  ml-comprehensive-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "ODIN ML Comprehensive Anomaly Detection",
+        "tags": ["odin", "ml", "anomaly-detection", "security"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "ML Anomaly Detection Status Overview",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "up{job=~\".*anomaly.*\"}",
+                "legendFormat": "{{job}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "green", "value": 1}
+                  ]
+                },
+                "mappings": [
+                  {"type": "value", "value": "0", "text": "DOWN"},
+                  {"type": "value", "value": "1", "text": "UP"}
+                ]
+              }
+            },
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "GPU Anomaly Scores",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "anomaly_score{algorithm=\"isolation_forest\"}",
+                "legendFormat": "GPU {{metric_type}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "drawStyle": "line",
+                  "lineInterpolation": "linear",
+                  "barAlignment": 0,
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "spanNulls": false,
+                  "insertNulls": false,
+                  "showPoints": "never",
+                  "pointSize": 5,
+                  "stacking": {"mode": "none"},
+                  "axisPlacement": "auto",
+                  "axisLabel": "",
+                  "scaleDistribution": {"type": "linear"},
+                  "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+                  "thresholdsStyle": {"mode": "off"}
+                },
+                "color": {"mode": "palette-classic"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 50},
+                    {"color": "red", "value": 80}
+                  ]
+                },
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 3,
+            "title": "Process Security Anomalies",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "process_anomaly_score",
+                "legendFormat": "{{process_name}} - {{anomaly_type}}"
+              },
+              {
+                "expr": "unusual_process_detected",
+                "legendFormat": "Suspicious: {{process_name}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "drawStyle": "line",
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never",
+                  "stacking": {"mode": "none"}
+                },
+                "color": {"mode": "palette-classic"},
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 50},
+                    {"color": "red", "value": 80}
+                  ]
+                },
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "K8s Pod Anomaly Scores",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "k8s_pod_anomaly_score",
+                "legendFormat": "{{namespace}}/{{pod}} - {{metric_type}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "drawStyle": "line",
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                },
+                "color": {"mode": "palette-classic"},
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 50},
+                    {"color": "red", "value": 80}
+                  ]
+                },
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+          },
+          {
+            "id": 5,
+            "title": "Disk Space Anomalies & Forecasting",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "disk_space_anomaly_score",
+                "legendFormat": "{{device}} ({{mountpoint}}) - {{anomaly_type}}"
+              },
+              {
+                "expr": "disk_utilization_forecast_days",
+                "legendFormat": "Days Until Full: {{device}} ({{mountpoint}})"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "drawStyle": "line",
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                },
+                "color": {"mode": "palette-classic"},
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 30},
+                    {"color": "red", "value": 7}
+                  ]
+                },
+                "unit": "short"
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+          },
+          {
+            "id": 6,
+            "title": "Critical Alerts Summary",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "group by (alertname, severity) (ALERTS{alertstate=\"firing\", alertname=~\".*anomaly.*|.*suspicious.*|.*critical.*\"})",
+                "format": "table"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "auto"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "severity"},
+                  "properties": [
+                    {
+                      "id": "custom.displayMode",
+                      "value": "color-background"
+                    },
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {"type": "value", "value": "critical", "text": "CRITICAL", "color": "red"},
+                        {"type": "value", "value": "warning", "text": "WARNING", "color": "yellow"},
+                        {"type": "value", "value": "info", "text": "INFO", "color": "blue"}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+          },
+          {
+            "id": 7,
+            "title": "Model Training & Health Status",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "gpu_anomaly_detector_health",
+                "legendFormat": "GPU Detector"
+              },
+              {
+                "expr": "k8s_anomaly_detector_health",
+                "legendFormat": "K8s Detector"
+              },
+              {
+                "expr": "process_anomaly_detector_health",
+                "legendFormat": "Process Detector"
+              },
+              {
+                "expr": "disk_anomaly_detector_health",
+                "legendFormat": "Disk Detector"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "green", "value": 1}
+                  ]
+                },
+                "mappings": [
+                  {"type": "value", "value": "0", "text": "UNHEALTHY"},
+                  {"type": "value", "value": "1", "text": "HEALTHY"}
+                ]
+              }
+            },
+            "gridPos": {"h": 6, "w": 12, "x": 0, "y": 32}
+          },
+          {
+            "id": 8,
+            "title": "Model Update Frequency",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "increase(gpu_anomaly_model_updates_total[24h])",
+                "legendFormat": "GPU Models"
+              },
+              {
+                "expr": "increase(k8s_anomaly_model_updates_total[24h])",
+                "legendFormat": "K8s Models"
+              },
+              {
+                "expr": "increase(process_anomaly_model_updates_total[24h])",
+                "legendFormat": "Process Models"
+              },
+              {
+                "expr": "increase(disk_anomaly_model_updates_total[24h])",
+                "legendFormat": "Disk Models"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "short"
+              }
+            },
+            "gridPos": {"h": 6, "w": 12, "x": 12, "y": 32}
+          },
+          {
+            "id": 9,
+            "title": "Suspicious Process Activity",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "topk(10, unusual_process_detected)",
+                "format": "table"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "auto"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "reason"},
+                  "properties": [
+                    {
+                      "id": "custom.displayMode",
+                      "value": "color-background"
+                    },
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {"type": "value", "value": "crypto_miners", "text": "CRYPTO MINER", "color": "red"},
+                        {"type": "value", "value": "reverse_shells", "text": "REVERSE SHELL", "color": "red"},
+                        {"type": "value", "value": "privilege_escalation", "text": "PRIVILEGE ESC", "color": "orange"},
+                        {"type": "value", "value": "data_exfiltration", "text": "DATA EXFIL", "color": "orange"}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 38}
+          },
+          {
+            "id": 10,
+            "title": "Disk Space Critical Alerts",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "disk_space_anomaly_score > 85",
+                "format": "table"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "auto"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "Value"},
+                  "properties": [
+                    {
+                      "id": "custom.displayMode",
+                      "value": "color-background"
+                    },
+                    {
+                      "id": "thresholds",
+                      "value": {
+                        "steps": [
+                          {"color": "green", "value": null},
+                          {"color": "yellow", "value": 75},
+                          {"color": "red", "value": 85}
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 38}
+          },
+          {
+            "id": 11,
+            "title": "ML Algorithm Performance",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "rate(gpu_anomaly_detection_errors_total[5m])",
+                "legendFormat": "GPU Detection Errors"
+              },
+              {
+                "expr": "rate(k8s_anomaly_detection_errors_total[5m])",
+                "legendFormat": "K8s Detection Errors"
+              },
+              {
+                "expr": "rate(process_anomaly_detection_errors_total[5m])",
+                "legendFormat": "Process Detection Errors"
+              },
+              {
+                "expr": "rate(disk_anomaly_detection_errors_total[5m])",
+                "legendFormat": "Disk Detection Errors"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "drawStyle": "line",
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                },
+                "color": {"mode": "palette-classic"},
+                "unit": "reqps"
+              }
+            },
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 46}
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "timepicker": {},
+        "templating": {
+          "list": []
+        },
+        "annotations": {
+          "list": []
+        },
+        "refresh": "30s",
+        "schemaVersion": 30,
+        "version": 1,
+        "links": []
+      }
+    }

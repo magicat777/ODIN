@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: monitoring
+data:
+  grafana.ini: |
+    [server]
+    domain = odin.local
+    root_url = http://odin.local:31494/
+
+    [branding]
+    app_title = ODIN - Omnipresent Diagnostics and Intelligence Network
+    app_subtitle = System Monitoring Dashboard
+    welcome_banner_title = Welcome to ODIN
+    welcome_banner_text = Omnipresent Diagnostics and Intelligence Network
+
+    [theme]
+    default_theme = dark
+
+    [users]
+    default_theme = dark
+    
+    [user]
+    disable_gravatar = true
+    
+    [ui]
+    app_title = ODIN Monitoring
+
+    [auth.anonymous]
+    enabled = false
+
+    [security]
+    admin_user = admin
+    admin_password = admin
+    cookie_secure = false
+
+    [dashboards]
+    default_home_dashboard_path = /d/system-overview/odin-system-overview
+    
+    [panels]
+    disable_sanitize_html = true
+    
+    [footer]
+    enabled = true
+    text = <script>setInterval(function(){document.querySelectorAll('img[alt*="avatar"], div[class*="UserAvatar"]').forEach(function(e){if(e.tagName==='IMG'){e.src='/public/img/grafana_icon.svg';e.style.borderRadius='50%';e.style.padding='2px';e.style.background='#1a1a1a';}else{e.style.backgroundImage='url(/public/img/grafana_icon.svg)';e.style.backgroundSize='contain';e.style.backgroundPosition='center';e.textContent='';}});},500);</script>

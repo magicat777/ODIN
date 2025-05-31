@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-custom-branding
+  namespace: monitoring
+data:
+  custom-logo.css: |
+    /* ODIN Custom Logo Sizing */
+    
+    /* Login page logo - make it much larger */
+    .login-branding {
+      width: 100% !important;
+      max-width: 800px !important;
+      margin: 0 auto !important;
+    }
+    
+    .login-branding img {
+      width: 100% !important;
+      height: auto !important;
+      max-width: 720px !important;
+      max-height: 360px !important;
+    }
+    
+    .login-branding-logo {
+      width: 100% !important;
+      height: auto !important;
+      max-width: 720px !important;
+      max-height: 360px !important;
+    }
+    
+    /* Adjust login form container to accommodate larger logo */
+    .login-outer-box {
+      padding-top: 20px !important;
+    }
+    
+    .login-inner-box {
+      margin-top: 20px !important;
+    }
+    
+    /* Make the login container wider */
+    .login {
+      max-width: 900px !important;
+      width: 90% !important;
+    }
+    
+    /* Side menu logo */
+    .sidemenu__logo img {
+      width: 180px !important;
+      height: 90px !important;
+      max-width: 180px !important;
+      object-fit: contain !important;
+    }
+    
+    .sidemenu__logo {
+      padding: 20px 10px !important;
+      height: auto !important;
+    }
+    
+    /* Override any SVG size constraints */
+    .login-branding svg,
+    .sidemenu__logo svg {
+      width: 100% !important;
+      height: 100% !important;
+    }
+  
+  custom-logo.js: |
+    // Override logo size constraints
+    (function() {
+      // Wait for page load
+      window.addEventListener('load', function() {
+        // Find and resize login logo
+        const loginLogo = document.querySelector('.login-branding img, .login-branding-logo');
+        if (loginLogo) {
+          loginLogo.style.width = '720px';
+          loginLogo.style.height = '360px';
+          loginLogo.style.maxWidth = '720px';
+          loginLogo.style.maxHeight = '360px';
+        }
+        
+        // Find and resize side menu logo
+        const sideMenuLogo = document.querySelector('.sidemenu__logo img');
+        if (sideMenuLogo) {
+          sideMenuLogo.style.width = '180px';
+          sideMenuLogo.style.height = '90px';
+        }
+      });
+    })();

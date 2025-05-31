@@ -1,0 +1,334 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-analysis-dashboards
+  namespace: monitoring
+data:
+  system-logs-analysis.json: |
+    {
+      "id": null,
+      "uid": "system-logs-analysis",
+      "title": "System Logs Analysis",
+      "tags": ["logs", "loki", "system"],
+      "timezone": "browser",
+      "schemaVersion": 30,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "type": "logs",
+            "title": "Kernel Messages",
+            "targets": [
+              {
+                "expr": "{} |= \"kernel\"",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": false,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "type": "logs",
+            "title": "System Errors",
+            "targets": [
+              {
+                "expr": "{} |~ \"error|fail\"",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": true,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 6, "w": 24, "x": 0, "y": 8},
+            "type": "graph",
+            "title": "Log Volume by Level",
+            "targets": [
+              {
+                "expr": "count_over_time({} |~ \"error\" [5m])",
+                "legendFormat": "Errors",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "logs/s",
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                }
+              }
+            }
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+            "type": "logs",
+            "title": "Authentication Events",
+            "targets": [
+              {
+                "expr": "{} |~ \"auth|login\"",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": false,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          },
+          {
+            "id": 5,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+            "type": "table",
+            "title": "Top Error Sources",
+            "targets": [
+              {
+                "expr": "{}",
+                "format": "table",
+                "instant": true,
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "auto"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "unit"},
+                  "properties": [
+                    {"id": "displayName", "value": "Service/Unit"},
+                    {"id": "custom.width", "value": 200}
+                  ]
+                },
+                {
+                  "matcher": {"id": "byName", "options": "Value"},
+                  "properties": [
+                    {"id": "displayName", "value": "Errors/sec"},
+                    {"id": "unit", "value": "ops"},
+                    {"id": "decimals", "value": 3}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 6,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22},
+            "type": "logs",
+            "title": "Hardware Events",
+            "targets": [
+              {
+                "expr": "{} |~ \"nvidia|gpu\"",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": false,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          },
+          {
+            "id": 7,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
+            "type": "logs",
+            "title": "Network Events",
+            "targets": [
+              {
+                "expr": "{} |~ \"network\"",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": false,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          },
+          {
+            "id": 8,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
+            "type": "logs",
+            "title": "Application Crashes",
+            "targets": [
+              {
+                "expr": "{} |~ \"error\"",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": true,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          }
+        ]
+    }
+  performance-logs.json: |
+    {
+      "id": null,
+      "uid": "performance-logs",
+      "title": "Performance & Resource Logs",
+      "tags": ["logs", "performance", "resources"],
+      "timezone": "browser",
+      "schemaVersion": 30,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+            "type": "logs",
+            "title": "OOM Killer Events",
+            "targets": [
+              {
+                "expr": "{} |~ \"memory\"",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": false,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+            "type": "logs",
+            "title": "CPU Throttling Events",
+            "targets": [
+              {
+                "expr": "{} |~ \"thermal\"",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": false,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+            "type": "logs",
+            "title": "Disk I/O Errors",
+            "targets": [
+              {
+                "expr": "{} |~ \"disk|filesystem\"",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": false,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+            "type": "logs",
+            "title": "Process Start/Stop Events",
+            "targets": [
+              {
+                "expr": "{}",
+                "legendFormat": "",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showTime": true,
+              "showLabels": false,
+              "showCommonLabels": false,
+              "wrapLogMessage": true,
+              "prettifyLogMessage": false,
+              "enableLogDetails": true,
+              "sortOrder": "Descending",
+              "dedupStrategy": "none"
+            }
+          }
+        ]
+    }

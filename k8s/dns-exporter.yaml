@@ -1,0 +1,192 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dns-exporter-script
+  namespace: monitoring
+data:
+  dns-exporter.py: |
+    #!/usr/bin/env python3
+    import time
+    import dns.resolver
+    import statistics
+    from prometheus_client import start_http_server, Histogram, Counter, Gauge, Info
+    
+    # DNS query metrics
+    dns_query_duration = Histogram('dns_query_duration_seconds', 'DNS query response time', ['server', 'domain', 'type'])
+    dns_query_success = Counter('dns_query_success_total', 'Successful DNS queries', ['server', 'domain', 'type'])
+    dns_query_failure = Counter('dns_query_failure_total', 'Failed DNS queries', ['server', 'domain', 'type', 'error'])
+    dns_resolver_rtt = Gauge('dns_resolver_rtt_seconds', 'DNS resolver round-trip time', ['server'])
+    
+    # Test domains and record types
+    TEST_DOMAINS = [
+        ('google.com', 'A'),
+        ('cloudflare.com', 'A'),
+        ('github.com', 'A'),
+        ('8.8.8.8.in-addr.arpa', 'PTR'),
+        ('_sip._tcp.google.com', 'SRV'),
+        ('google.com', 'AAAA')
+    ]
+    
+    def get_system_resolvers():
+        """Get system DNS resolvers from /etc/resolv.conf"""
+        resolvers = []
+        try:
+            with open('/etc/resolv.conf', 'r') as f:
+                for line in f:
+                    if line.startswith('nameserver'):
+                        resolver_ip = line.split()[1]
+                        resolvers.append(resolver_ip)
+        except:
+            resolvers = ['8.8.8.8', '1.1.1.1']  # Fallback
+        return resolvers
+    
+    def test_dns_performance():
+        """Test DNS query performance against configured resolvers"""
+        resolvers = get_system_resolvers()
+        
+        for resolver_ip in resolvers:
+            resolver = dns.resolver.Resolver()
+            resolver.nameservers = [resolver_ip]
+            resolver.timeout = 5.0
+            resolver.lifetime = 5.0
+            
+            response_times = []
+            
+            for domain, record_type in TEST_DOMAINS:
+                try:
+                    start_time = time.time()
+                    resolver.resolve(domain, record_type)
+                    duration = time.time() - start_time
+                    
+                    dns_query_duration.labels(
+                        server=resolver_ip,
+                        domain=domain,
+                        type=record_type
+                    ).observe(duration)
+                    
+                    dns_query_success.labels(
+                        server=resolver_ip,
+                        domain=domain,
+                        type=record_type
+                    ).inc()
+                    
+                    response_times.append(duration)
+                    
+                except dns.resolver.NXDOMAIN:
+                    dns_query_failure.labels(
+                        server=resolver_ip,
+                        domain=domain,
+                        type=record_type,
+                        error='NXDOMAIN'
+                    ).inc()
+                except dns.resolver.Timeout:
+                    dns_query_failure.labels(
+                        server=resolver_ip,
+                        domain=domain,
+                        type=record_type,
+                        error='TIMEOUT'
+                    ).inc()
+                except Exception as e:
+                    dns_query_failure.labels(
+                        server=resolver_ip,
+                        domain=domain,
+                        type=record_type,
+                        error=type(e).__name__
+                    ).inc()
+            
+            # Update average RTT for this resolver
+            if response_times:
+                avg_rtt = statistics.mean(response_times)
+                dns_resolver_rtt.labels(server=resolver_ip).set(avg_rtt)
+    
+    if __name__ == '__main__':
+        # Start Prometheus metrics server
+        start_http_server(9405)
+        print("DNS exporter started on port 9405")
+        
+        # Test DNS performance every 30 seconds
+        while True:
+            try:
+                test_dns_performance()
+            except Exception as e:
+                print(f"Error testing DNS: {e}")
+            time.sleep(30)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-exporter
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-exporter
+  template:
+    metadata:
+      labels:
+        app: dns-exporter
+    spec:
+      containers:
+      - name: dns-exporter
+        image: python:3.10-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install prometheus_client dnspython
+          python /scripts/dns-exporter.py
+        ports:
+        - containerPort: 9405
+          name: metrics
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: resolv-conf
+          mountPath: /etc/resolv.conf
+          readOnly: true
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9405
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9405
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: script
+        configMap:
+          name: dns-exporter-script
+          defaultMode: 0755
+      - name: resolv-conf
+        hostPath:
+          path: /etc/resolv.conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dns-exporter
+  namespace: monitoring
+  labels:
+    app: dns-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9405"
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9405
+    targetPort: 9405
+  selector:
+    app: dns-exporter

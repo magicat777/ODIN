@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-avatar-override
+  namespace: monitoring
+data:
+  default_avatar.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+      <defs>
+        <linearGradient id="avatarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#00ff88;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#0099ff;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      
+      <!-- Background circle -->
+      <circle cx="64" cy="64" r="60" fill="#1a1a1a" stroke="url(#avatarGrad)" stroke-width="3"/>
+      
+      <!-- ODIN text -->
+      <text x="64" y="75" font-family="Arial, sans-serif" font-size="32" font-weight="bold" 
+            text-anchor="middle" fill="url(#avatarGrad)">ODIN</text>
+      
+      <!-- Small network indicators -->
+      <circle cx="20" cy="20" r="4" fill="#00ff88" opacity="0.8"/>
+      <circle cx="108" cy="20" r="4" fill="#0099ff" opacity="0.8"/>
+      <circle cx="20" cy="108" r="3" fill="#00ff88" opacity="0.6"/>
+      <circle cx="108" cy="108" r="3" fill="#0099ff" opacity="0.6"/>
+    </svg>

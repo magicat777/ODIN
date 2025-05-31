@@ -1,0 +1,808 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: disk-anomaly-detector-script
+  namespace: monitoring
+data:
+  disk_anomaly_detector.py: |
+    #!/usr/bin/env python3
+    import time
+    import numpy as np
+    import pandas as pd
+    from datetime import datetime, timedelta
+    import requests
+    import logging
+    import json
+    import os
+    import pickle
+    import threading
+    import shutil
+    from prometheus_client import start_http_server, Gauge, Counter, Histogram
+    from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LinearRegression
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import warnings
+    warnings.filterwarnings('ignore')
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger('disk-anomaly-detector')
+    
+    # Prometheus metrics
+    disk_anomaly_score = Gauge('disk_space_anomaly_score', 'Disk space anomaly score', ['device', 'mountpoint', 'anomaly_type', 'algorithm'])
+    disk_growth_anomaly = Gauge('disk_growth_anomaly_score', 'Disk growth rate anomaly', ['device', 'mountpoint'])
+    disk_utilization_forecast = Gauge('disk_utilization_forecast_days', 'Days until disk full prediction', ['device', 'mountpoint'])
+    disk_inode_anomaly = Gauge('disk_inode_anomaly_score', 'Inode usage anomaly', ['device', 'mountpoint'])
+    disk_io_anomaly = Gauge('disk_io_anomaly_score', 'Disk I/O anomaly', ['device', 'operation'])
+    disk_temperature_anomaly = Gauge('disk_temperature_anomaly_score', 'Disk temperature anomaly', ['device'])
+    model_training_duration = Histogram('disk_anomaly_model_training_duration_seconds', 'Model training duration')
+    model_updates = Counter('disk_anomaly_model_updates_total', 'Total model updates', ['metric_type'])
+    detection_errors = Counter('disk_anomaly_detection_errors_total', 'Total detection errors', ['metric_type'])
+    health_status = Gauge('disk_anomaly_detector_health', 'Health status of disk anomaly detector')
+    disk_metrics_processed = Counter('disk_anomaly_metrics_processed_total', 'Total disk metrics processed', ['metric_type'])
+    
+    # Configuration
+    PROMETHEUS_URL = os.getenv('PROMETHEUS_URL', 'http://prometheus:9090')
+    MODEL_PATH = '/models'
+    UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', '180'))  # 3 minutes
+    TRAINING_WINDOW = os.getenv('TRAINING_WINDOW', '14d')  # 14 days for disk trends
+    
+    # Disk Metrics Configuration
+    DISK_METRICS = [
+        {
+            'name': 'disk_usage_percent',
+            'query': '(node_filesystem_size_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} - node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"}) / node_filesystem_size_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} * 100',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.05,  # Lower sensitivity for disk usage
+            'min_samples': 100,
+            'critical_threshold': 85,  # Alert at 85% usage
+            'warning_threshold': 75   # Warning at 75% usage
+        },
+        {
+            'name': 'disk_growth_rate',
+            'query': 'increase(node_filesystem_size_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"}[1h]) - increase(node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"}[1h])',
+            'algorithm': 'statistical',
+            'z_threshold': 2.5,
+            'min_samples': 50,
+            'time_based': True
+        },
+        {
+            'name': 'inode_usage_percent',
+            'query': '(node_filesystem_files{fstype!~"tmpfs|fuse.lxcfs|squashfs"} - node_filesystem_files_free{fstype!~"tmpfs|fuse.lxcfs|squashfs"}) / node_filesystem_files{fstype!~"tmpfs|fuse.lxcfs|squashfs"} * 100',
+            'algorithm': 'statistical',
+            'z_threshold': 3,
+            'min_samples': 50,
+            'critical_threshold': 90,
+            'warning_threshold': 80
+        },
+        {
+            'name': 'disk_read_iops',
+            'query': 'rate(node_disk_reads_completed_total[5m])',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.1,
+            'min_samples': 60
+        },
+        {
+            'name': 'disk_write_iops',
+            'query': 'rate(node_disk_writes_completed_total[5m])',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.1,
+            'min_samples': 60
+        },
+        {
+            'name': 'disk_read_latency',
+            'query': 'rate(node_disk_read_time_seconds_total[5m]) / rate(node_disk_reads_completed_total[5m])',
+            'algorithm': 'statistical',
+            'z_threshold': 2,
+            'min_samples': 40
+        },
+        {
+            'name': 'disk_write_latency',
+            'query': 'rate(node_disk_write_time_seconds_total[5m]) / rate(node_disk_writes_completed_total[5m])',
+            'algorithm': 'statistical',
+            'z_threshold': 2,
+            'min_samples': 40
+        }
+    ]
+    
+    # Critical disk paths to monitor closely
+    CRITICAL_PATHS = [
+        '/',
+        '/var',
+        '/var/log',
+        '/var/lib/odin',
+        '/tmp',
+        '/home'
+    ]
+    
+    # Global health status
+    health_info = {
+        'healthy': True,
+        'last_update': datetime.now(),
+        'errors': [],
+        'prometheus_available': False,
+        'critical_alerts': [],
+        'forecast_warnings': []
+    }
+    
+    class HealthCheckHandler(BaseHTTPRequestHandler):
+        """HTTP handler for health checks"""
+        def do_GET(self):
+            if self.path == '/health':
+                self.send_health_response()
+            elif self.path == '/healthz':
+                self.send_healthz_response()
+            elif self.path == '/ready':
+                self.send_ready_response()
+            else:
+                self.send_error(404)
+        
+        def send_health_response(self):
+            """Detailed health check response"""
+            status_code = 200 if health_info['healthy'] else 503
+            response = {
+                'status': 'healthy' if status_code == 200 else 'unhealthy',
+                'timestamp': datetime.now().isoformat(),
+                'prometheus_available': health_info['prometheus_available'],
+                'last_update': health_info['last_update'].isoformat(),
+                'critical_alerts_count': len(health_info['critical_alerts']),
+                'forecast_warnings_count': len(health_info['forecast_warnings'])
+            }
+            
+            if health_info['errors']:
+                response['recent_errors'] = health_info['errors'][-5:]
+                
+            if health_info['critical_alerts']:
+                response['critical_alerts'] = health_info['critical_alerts'][-10:]
+                
+            if health_info['forecast_warnings']:
+                response['forecast_warnings'] = health_info['forecast_warnings'][-5:]
+                
+            self.send_response(status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            import json
+            self.wfile.write(json.dumps(response).encode())
+        
+        def send_healthz_response(self):
+            """Simple health check for k8s"""
+            if health_info['healthy']:
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'OK')
+            else:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(b'Unhealthy')
+        
+        def send_ready_response(self):
+            """Readiness check"""
+            now = datetime.now()
+            if (now - health_info['last_update'] < timedelta(minutes=5) and 
+                health_info['prometheus_available']):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'Ready')
+            else:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(b'Not Ready')
+        
+        def log_message(self, format, *args):
+            # Suppress access logs
+            pass
+    
+    def run_health_server():
+        """Run the health check HTTP server"""
+        server = HTTPServer(('', 8080), HealthCheckHandler)
+        server.serve_forever()
+    
+    class DiskAnomalyDetector:
+        def __init__(self):
+            self.models = {}
+            self.scalers = {}
+            self.thresholds = {}
+            self.forecasting_models = {}
+            self.baseline_usage = {}
+            os.makedirs(MODEL_PATH, exist_ok=True)
+            
+            self.load_models()
+            self.load_baselines()
+            
+        def load_models(self):
+            """Load saved models from disk"""
+            for metric in DISK_METRICS:
+                model_file = os.path.join(MODEL_PATH, f"disk_{metric['name'].replace('/', '_')}.pkl")
+                if os.path.exists(model_file):
+                    try:
+                        with open(model_file, 'rb') as f:
+                            data = pickle.load(f)
+                            self.models[metric['name']] = data['model']
+                            self.scalers[metric['name']] = data.get('scaler')
+                            self.thresholds[metric['name']] = data.get('thresholds', {})
+                            self.forecasting_models[metric['name']] = data.get('forecasting_model')
+                            logger.info(f"Loaded disk model for {metric['name']}")
+                    except Exception as e:
+                        logger.error(f"Failed to load disk model for {metric['name']}: {e}")
+                        
+        def save_model(self, metric_name):
+            """Save model to disk"""
+            if metric_name in self.models:
+                model_file = os.path.join(MODEL_PATH, f"disk_{metric_name.replace('/', '_')}.pkl")
+                try:
+                    with open(model_file, 'wb') as f:
+                        pickle.dump({
+                            'model': self.models[metric_name],
+                            'scaler': self.scalers.get(metric_name),
+                            'thresholds': self.thresholds.get(metric_name, {}),
+                            'forecasting_model': self.forecasting_models.get(metric_name)
+                        }, f)
+                    logger.info(f"Saved disk model for {metric_name}")
+                except Exception as e:
+                    logger.error(f"Failed to save disk model for {metric_name}: {e}")
+                    
+        def load_baselines(self):
+            """Load disk usage baselines"""
+            baseline_file = os.path.join(MODEL_PATH, 'disk_baselines.pkl')
+            if os.path.exists(baseline_file):
+                try:
+                    with open(baseline_file, 'rb') as f:
+                        self.baseline_usage = pickle.load(f)
+                        logger.info(f"Loaded {len(self.baseline_usage)} disk baselines")
+                except Exception as e:
+                    logger.error(f"Failed to load disk baselines: {e}")
+                    
+        def save_baselines(self):
+            """Save disk usage baselines"""
+            baseline_file = os.path.join(MODEL_PATH, 'disk_baselines.pkl')
+            try:
+                with open(baseline_file, 'wb') as f:
+                    pickle.dump(self.baseline_usage, f)
+                logger.info(f"Saved {len(self.baseline_usage)} disk baselines")
+            except Exception as e:
+                logger.error(f"Failed to save disk baselines: {e}")
+                
+        def query_prometheus(self, query, start_time=None, end_time=None, step='300s'):
+            """Query Prometheus for metric data"""
+            if not start_time:
+                end_time = datetime.now()
+                start_time = end_time - timedelta(days=14)  # 14 days for disk trends
+                
+            params = {
+                'query': query,
+                'start': start_time.timestamp(),
+                'end': end_time.timestamp(),
+                'step': step
+            }
+            
+            try:
+                response = requests.get(f"{PROMETHEUS_URL}/api/v1/query_range", params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                
+                health_info['prometheus_available'] = True
+                
+                if data['status'] == 'success' and data['data']['result']:
+                    # Process multiple time series
+                    all_data = []
+                    for result in data['data']['result']:
+                        for timestamp, value in result['values']:
+                            row = {'timestamp': float(timestamp), 'value': float(value)}
+                            # Add labels as additional features
+                            for label, label_value in result['metric'].items():
+                                if label not in ['__name__', 'instance', 'job']:
+                                    row[label] = label_value
+                            all_data.append(row)
+                    
+                    if all_data:
+                        return pd.DataFrame(all_data)
+                        
+            except Exception as e:
+                logger.error(f"Failed to query Prometheus: {e}")
+                health_info['prometheus_available'] = False
+                health_info['errors'].append(f"Prometheus error: {str(e)}")
+                detection_errors.labels(metric_type=query).inc()
+                
+            return pd.DataFrame()
+            
+        def query_instant(self, query):
+            """Query Prometheus for instant values"""
+            try:
+                response = requests.get(f"{PROMETHEUS_URL}/api/v1/query", params={'query': query}, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                
+                health_info['prometheus_available'] = True
+                
+                if data['status'] == 'success' and data['data']['result']:
+                    results = []
+                    for result in data['data']['result']:
+                        row = {
+                            'value': float(result['value'][1]),
+                            'labels': result['metric']
+                        }
+                        results.append(row)
+                    return results
+                    
+            except Exception as e:
+                logger.error(f"Failed to query instant value: {e}")
+                health_info['prometheus_available'] = False
+                
+            return []
+            
+        def predict_disk_full(self, device, mountpoint, historical_data):
+            """Predict when disk will be full based on growth trends"""
+            if len(historical_data) < 10:
+                return None
+                
+            try:
+                # Prepare time series data
+                df = historical_data.sort_values('timestamp')
+                df['days_from_start'] = (df['timestamp'] - df['timestamp'].min()) / 86400  # Convert to days
+                
+                # Filter out obvious outliers
+                q1 = df['value'].quantile(0.25)
+                q3 = df['value'].quantile(0.75)
+                iqr = q3 - q1
+                df_clean = df[(df['value'] >= q1 - 1.5*iqr) & (df['value'] <= q3 + 1.5*iqr)]
+                
+                if len(df_clean) < 5:
+                    return None
+                
+                # Fit linear regression to predict trend
+                X = df_clean[['days_from_start']].values
+                y = df_clean['value'].values
+                
+                model = LinearRegression()
+                model.fit(X, y)
+                
+                # Current usage and growth rate
+                current_usage = y[-1]
+                growth_per_day = model.coef_[0]
+                
+                # Predict days until 95% full
+                if growth_per_day > 0:
+                    days_until_full = (95 - current_usage) / growth_per_day
+                    
+                    if days_until_full > 0:
+                        self.forecasting_models[f"{device}_{mountpoint}"] = model
+                        
+                        # Generate alerts based on forecast
+                        if days_until_full < 7:
+                            severity = 'critical'
+                        elif days_until_full < 30:
+                            severity = 'warning'
+                        else:
+                            severity = 'info'
+                            
+                        forecast_info = {
+                            'device': device,
+                            'mountpoint': mountpoint,
+                            'days_until_full': days_until_full,
+                            'current_usage': current_usage,
+                            'growth_per_day': growth_per_day,
+                            'severity': severity,
+                            'timestamp': datetime.now().isoformat()
+                        }
+                        
+                        if severity in ['critical', 'warning']:
+                            health_info['forecast_warnings'].append(forecast_info)
+                            logger.warning(f"Disk forecast alert for {device} ({mountpoint}): {days_until_full:.1f} days until full")
+                        
+                        return days_until_full
+                        
+            except Exception as e:
+                logger.error(f"Failed to predict disk full for {device}: {e}")
+                
+            return None
+            
+        def check_critical_thresholds(self, metric_config, device, mountpoint, current_value):
+            """Check if current value exceeds critical thresholds"""
+            if 'critical_threshold' in metric_config:
+                if current_value >= metric_config['critical_threshold']:
+                    alert_info = {
+                        'device': device,
+                        'mountpoint': mountpoint,
+                        'metric': metric_config['name'],
+                        'value': current_value,
+                        'threshold': metric_config['critical_threshold'],
+                        'severity': 'critical',
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    health_info['critical_alerts'].append(alert_info)
+                    logger.critical(f"Critical threshold exceeded: {device} ({mountpoint}) {metric_config['name']} = {current_value}%")
+                    return True
+                    
+            if 'warning_threshold' in metric_config:
+                if current_value >= metric_config['warning_threshold']:
+                    alert_info = {
+                        'device': device,
+                        'mountpoint': mountpoint,
+                        'metric': metric_config['name'],
+                        'value': current_value,
+                        'threshold': metric_config['warning_threshold'],
+                        'severity': 'warning',
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    health_info['critical_alerts'].append(alert_info)
+                    logger.warning(f"Warning threshold exceeded: {device} ({mountpoint}) {metric_config['name']} = {current_value}%")
+                    return True
+                    
+            return False
+            
+        def train_isolation_forest(self, metric_config, data):
+            """Train Isolation Forest model for disk metrics"""
+            if len(data) < metric_config['min_samples']:
+                logger.warning(f"Insufficient data for disk {metric_config['name']}: {len(data)} samples")
+                return None, None
+                
+            # Prepare features - include device metadata
+            feature_cols = ['value']
+            if 'device' in data.columns:
+                # Convert categorical to numeric
+                data['device_hash'] = pd.Categorical(data['device']).codes
+                feature_cols.append('device_hash')
+            if 'mountpoint' in data.columns:
+                data['mountpoint_hash'] = pd.Categorical(data['mountpoint']).codes
+                feature_cols.append('mountpoint_hash')
+                
+            # Add time-based features
+            data['hour'] = pd.to_datetime(data['timestamp'], unit='s').dt.hour
+            data['dayofweek'] = pd.to_datetime(data['timestamp'], unit='s').dt.dayofweek
+            feature_cols.extend(['hour', 'dayofweek'])
+            
+            X = data[feature_cols].values
+            
+            # Scale features
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            
+            # Train model
+            model = IsolationForest(
+                contamination=metric_config['sensitivity'],
+                random_state=42,
+                n_estimators=100
+            )
+            
+            with model_training_duration.time():
+                model.fit(X_scaled)
+                
+            model_updates.labels(metric_type=metric_config['name']).inc()
+            
+            return model, scaler
+            
+        def train_statistical_model(self, metric_config, data):
+            """Train statistical anomaly detection model"""
+            if len(data) < metric_config['min_samples']:
+                logger.warning(f"Insufficient data for disk {metric_config['name']}: {len(data)} samples")
+                return None
+                
+            values = data['value'].values
+            
+            # Calculate statistics per device if available
+            thresholds = {
+                'global': {
+                    'mean': np.mean(values),
+                    'std': np.std(values),
+                    'p99': np.percentile(values, 99),
+                    'p95': np.percentile(values, 95),
+                    'p05': np.percentile(values, 5),
+                    'p01': np.percentile(values, 1)
+                }
+            }
+            
+            # Per-device thresholds if device data available
+            if 'device' in data.columns:
+                thresholds['per_device'] = {}
+                for device in data['device'].unique():
+                    device_data = data[data['device'] == device]['value'].values
+                    if len(device_data) >= 10:  # Minimum samples per device
+                        thresholds['per_device'][device] = {
+                            'mean': np.mean(device_data),
+                            'std': np.std(device_data),
+                            'p95': np.percentile(device_data, 95)
+                        }
+            
+            model_updates.labels(metric_type=metric_config['name']).inc()
+            
+            return thresholds
+            
+        def detect_disk_anomalies(self, metric_config):
+            """Detect anomalies for disk metrics"""
+            try:
+                # Query current values
+                current_results = self.query_instant(metric_config['query'])
+                
+                if not current_results:
+                    logger.debug(f"No data for disk {metric_config['name']}")
+                    return
+                    
+                for result in current_results:
+                    current_value = result['value']
+                    labels = result['labels']
+                    
+                    # Extract device and mountpoint from labels
+                    device = labels.get('device', labels.get('instance', 'unknown'))
+                    mountpoint = labels.get('mountpoint', labels.get('fstype', 'unknown'))
+                    
+                    disk_metrics_processed.labels(metric_type=metric_config['name']).inc()
+                    
+                    # Check critical thresholds first
+                    is_critical = self.check_critical_thresholds(metric_config, device, mountpoint, current_value)
+                    
+                    # Run forecasting for usage metrics
+                    if metric_config['name'] == 'disk_usage_percent':
+                        historical_data = self.query_prometheus(
+                            metric_config['query'] + f'{{device="{device}",mountpoint="{mountpoint}"}}',
+                            start_time=datetime.now() - timedelta(days=7)
+                        )
+                        if not historical_data.empty:
+                            days_until_full = self.predict_disk_full(device, mountpoint, historical_data)
+                            if days_until_full:
+                                disk_utilization_forecast.labels(
+                                    device=device,
+                                    mountpoint=mountpoint
+                                ).set(days_until_full)
+                    
+                    if metric_config['algorithm'] == 'isolation_forest':
+                        if metric_config['name'] in self.models:
+                            model = self.models[metric_config['name']]
+                            scaler = self.scalers[metric_config['name']]
+                            
+                            # Prepare features
+                            now = datetime.now()
+                            hour = now.hour
+                            dayofweek = now.weekday()
+                            
+                            # Create feature vector matching training
+                            features = [current_value, hour, dayofweek]
+                            X = np.array([features])
+                            X_scaled = scaler.transform(X)
+                            
+                            # Get anomaly score
+                            score = model.decision_function(X_scaled)[0]
+                            normalized_score = 50 + (score * 50)
+                            normalized_score = max(0, min(100, normalized_score))
+                            
+                            disk_anomaly_score.labels(
+                                device=device,
+                                mountpoint=mountpoint,
+                                anomaly_type=metric_config['name'],
+                                algorithm='isolation_forest'
+                            ).set(100 - normalized_score)
+                            
+                            # Alert on high anomaly scores
+                            if (100 - normalized_score) > 80:
+                                logger.warning(f"High disk anomaly detected: {device} ({mountpoint}) - {metric_config['name']} score: {100-normalized_score}")
+                            
+                            logger.debug(f"Disk {metric_config['name']} [{device}:{mountpoint}]: value={current_value}, score={100-normalized_score}")
+                            
+                    elif metric_config['algorithm'] == 'statistical':
+                        if metric_config['name'] in self.thresholds:
+                            thresholds = self.thresholds[metric_config['name']]
+                            
+                            # Use device-specific thresholds if available
+                            threshold_data = thresholds['global']
+                            if ('per_device' in thresholds and 
+                                device in thresholds['per_device']):
+                                threshold_data = thresholds['per_device'][device]
+                            
+                            # Calculate z-score
+                            z_score = abs((current_value - threshold_data['mean']) / (threshold_data['std'] + 1e-10))
+                            
+                            # Convert to 0-100 scale
+                            score = min(100, (z_score / metric_config['z_threshold']) * 100)
+                            
+                            disk_anomaly_score.labels(
+                                device=device,
+                                mountpoint=mountpoint,
+                                anomaly_type=metric_config['name'],
+                                algorithm='statistical'
+                            ).set(score)
+                            
+                            # Alert on high anomaly scores
+                            if score > 80:
+                                logger.warning(f"High disk anomaly detected: {device} ({mountpoint}) - {metric_config['name']} z-score: {z_score}")
+                            
+                            logger.debug(f"Disk {metric_config['name']} [{device}:{mountpoint}]: value={current_value}, z-score={z_score}, score={score}")
+                        
+            except Exception as e:
+                logger.error(f"Error detecting disk anomalies for {metric_config['name']}: {e}")
+                detection_errors.labels(metric_type=metric_config['name']).inc()
+                
+        def update_models(self):
+            """Update all disk anomaly detection models"""
+            logger.info("Updating disk anomaly detection models...")
+            
+            for metric_config in DISK_METRICS:
+                try:
+                    # Query training data
+                    training_data = self.query_prometheus(metric_config['query'])
+                    
+                    if training_data.empty:
+                        logger.warning(f"No training data for disk {metric_config['name']}")
+                        continue
+                        
+                    if metric_config['algorithm'] == 'isolation_forest':
+                        model, scaler = self.train_isolation_forest(metric_config, training_data)
+                        if model:
+                            self.models[metric_config['name']] = model
+                            self.scalers[metric_config['name']] = scaler
+                            self.save_model(metric_config['name'])
+                            
+                    elif metric_config['algorithm'] == 'statistical':
+                        thresholds = self.train_statistical_model(metric_config, training_data)
+                        if thresholds:
+                            self.thresholds[metric_config['name']] = thresholds
+                            self.save_model(metric_config['name'])
+                            
+                    logger.info(f"Updated disk model for {metric_config['name']}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to update disk model for {metric_config['name']}: {e}")
+                    health_info['errors'].append(f"Model update error: {str(e)}")
+                    
+            # Save updated baselines
+            self.save_baselines()
+                    
+        def run(self):
+            """Main disk anomaly detection loop"""
+            # Initial model training
+            self.update_models()
+            
+            last_model_update = time.time()
+            
+            while True:
+                try:
+                    # Detect anomalies for all metrics
+                    for metric_config in DISK_METRICS:
+                        self.detect_disk_anomalies(metric_config)
+                        
+                    # Update models periodically (every 12 hours)
+                    if time.time() - last_model_update > 43200:
+                        self.update_models()
+                        last_model_update = time.time()
+                        
+                    # Update health status
+                    health_info['healthy'] = health_info['prometheus_available']
+                    health_info['last_update'] = datetime.now()
+                    health_status.set(1 if health_info['healthy'] else 0)
+                    
+                    # Clean old alerts (keep last 24 hours)
+                    cutoff_time = datetime.now() - timedelta(hours=24)
+                    health_info['critical_alerts'] = [
+                        alert for alert in health_info['critical_alerts']
+                        if datetime.fromisoformat(alert['timestamp']) > cutoff_time
+                    ]
+                    health_info['forecast_warnings'] = [
+                        warning for warning in health_info['forecast_warnings']
+                        if datetime.fromisoformat(warning['timestamp']) > cutoff_time
+                    ]
+                    
+                    time.sleep(UPDATE_INTERVAL)
+                    
+                except Exception as e:
+                    logger.error(f"Error in disk anomaly detection loop: {e}")
+                    health_info['healthy'] = False
+                    health_info['errors'].append(f"Main loop error: {str(e)}")
+                    health_status.set(0)
+                    time.sleep(60)
+    
+    def main():
+        # Start Prometheus metrics server
+        start_http_server(9408)
+        logger.info("Started disk anomaly detection metrics server on port 9408")
+        
+        # Start health check server in a separate thread
+        health_thread = threading.Thread(target=run_health_server, daemon=True)
+        health_thread.start()
+        logger.info("Started health check server on port 8080")
+        
+        # Start disk anomaly detector
+        detector = DiskAnomalyDetector()
+        detector.run()
+    
+    if __name__ == '__main__':
+        main()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: disk-anomaly-detector
+  namespace: monitoring
+  labels:
+    app: disk-anomaly-detector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: disk-anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: disk-anomaly-detector
+    spec:
+      containers:
+      - name: disk-anomaly-detector
+        image: python:3.11-slim
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          apt-get update && apt-get install -y gcc g++ && \
+          pip install --no-cache-dir -r /requirements/requirements.txt && \
+          python /app/disk_anomaly_detector.py
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus:9090"
+        - name: UPDATE_INTERVAL
+          value: "180"  # 3 minute updates
+        - name: TRAINING_WINDOW
+          value: "14d"
+        ports:
+        - containerPort: 9408
+          name: metrics
+        - containerPort: 8080
+          name: health
+        volumeMounts:
+        - name: script
+          mountPath: /app
+        - name: requirements
+          mountPath: /requirements
+        - name: models
+          mountPath: /models
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: script
+        configMap:
+          name: disk-anomaly-detector-script
+          defaultMode: 0755
+      - name: requirements
+        configMap:
+          name: anomaly-detector-requirements
+      - name: models
+        persistentVolumeClaim:
+          claimName: anomaly-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: disk-anomaly-detector
+  namespace: monitoring
+  labels:
+    app: disk-anomaly-detector
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9408"
+    prometheus.io/path: "/metrics"
+spec:
+  ports:
+  - port: 9408
+    targetPort: 9408
+    name: metrics
+  - port: 8080
+    targetPort: 8080
+    name: health
+  selector:
+    app: disk-anomaly-detector

@@ -1,0 +1,318 @@
+apiVersion: v1
+data:
+  comprehensive-logs-dashboard.json: |
+    {
+      "id": null,
+      "uid": "comprehensive-logs",
+      "title": "ODIN Comprehensive Logs Dashboard",
+      "tags": ["odin", "logs", "monitoring"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Total Log Streams",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "count by () (count by (app) ({namespace=\"monitoring\"}))",
+              "legendFormat": "Active Streams",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 10},
+                  {"color": "red", "value": 50}
+                ]
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Services Logging",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "count by () (group by (app) ({namespace=\"monitoring\"}))",
+              "legendFormat": "Services",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "green", "value": 5}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "Recent Errors",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "count by () ({namespace=\"monitoring\"} |~ \"(?i)(error|fail|exception|fatal)\" [5m])",
+              "legendFormat": "Errors (5m)",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+        },
+        {
+          "id": 4,
+          "title": "System Logs Available",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "count by () ({job=\"system\"})",
+              "legendFormat": "System Logs",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              },
+              "mappings": [
+                {"options": {"0": {"text": "DOWN"}}, "type": "value"},
+                {"options": {"1": {"text": "UP"}}, "type": "value"}
+              ]
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+        },
+        {
+          "id": 5,
+          "title": "Log Volume by Service",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "count by (app) (count_over_time({namespace=\"monitoring\"} [1m]))",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+        },
+        {
+          "id": 6,
+          "title": "Error Logs Over Time",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "count by (app) (count_over_time({namespace=\"monitoring\"} |~ \"(?i)(error|fail|exception|fatal)\" [1m]))",
+              "legendFormat": "{{app}} errors",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+        },
+        {
+          "id": 7,
+          "title": "Recent Log Entries by Service",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{namespace=\"monitoring\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 12}
+        },
+        {
+          "id": 8,
+          "title": "System Logs (Host)",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{job=\"system\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+        },
+        {
+          "id": 9,
+          "title": "Alert/Error Log Entries",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{namespace=\"monitoring\"} |~ \"(?i)(error|fail|exception|fatal|alert|warn)\"",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+        },
+        {
+          "id": 10,
+          "title": "Service Status Overview",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "{namespace=\"monitoring\"}",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "app": {
+                    "aggregations": ["count"],
+                    "operation": "groupby"
+                  }
+                }
+              }
+            }
+          ],
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32}
+        },
+        {
+          "id": 11,
+          "title": "Prometheus Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{app=\"prometheus\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 40}
+        },
+        {
+          "id": 12,
+          "title": "Grafana Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{app=\"grafana\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 8, "y": 40}
+        },
+        {
+          "id": 13,
+          "title": "Loki Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{app=\"loki\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 16, "y": 40}
+        }
+      ]
+    }
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"comprehensive-logs-dashboard.json":"{\n  \"id\": null,\n  \"uid\": \"comprehensive-logs\",\n  \"title\": \"ODIN Comprehensive Logs Dashboard\",\n  \"tags\": [\"odin\", \"logs\", \"monitoring\"],\n  \"style\": \"dark\",\n  \"timezone\": \"browser\",\n  \"refresh\": \"30s\",\n  \"schemaVersion\": 27,\n  \"version\": 1,\n  \"time\": {\n    \"from\": \"now-1h\",\n    \"to\": \"now\"\n  },\n  \"panels\": [\n    {\n      \"id\": 1,\n      \"title\": \"Total Log Streams\",\n      \"type\": \"stat\",\n      \"targets\": [\n        {\n          \"expr\": \"count by () (count by (app) ({namespace=\\\"monitoring\\\"}))\",\n          \"legendFormat\": \"Active Streams\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"thresholds\"},\n          \"thresholds\": {\n            \"steps\": [\n              {\"color\": \"green\", \"value\": null},\n              {\"color\": \"yellow\", \"value\": 10},\n              {\"color\": \"red\", \"value\": 50}\n            ]\n          },\n          \"unit\": \"reqps\"\n        }\n      },\n      \"gridPos\": {\"h\": 4, \"w\": 6, \"x\": 0, \"y\": 0}\n    },\n    {\n      \"id\": 2,\n      \"title\": \"Services Logging\",\n      \"type\": \"stat\",\n      \"targets\": [\n        {\n          \"expr\": \"count by () (group by (app) ({namespace=\\\"monitoring\\\"}))\",\n          \"legendFormat\": \"Services\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"thresholds\"},\n          \"thresholds\": {\n            \"steps\": [\n              {\"color\": \"red\", \"value\": null},\n              {\"color\": \"yellow\", \"value\": 1},\n              {\"color\": \"green\", \"value\": 5}\n            ]\n          },\n          \"unit\": \"short\"\n        }\n      },\n      \"gridPos\": {\"h\": 4, \"w\": 6, \"x\": 6, \"y\": 0}\n    },\n    {\n      \"id\": 3,\n      \"title\": \"Recent Errors\",\n      \"type\": \"stat\",\n      \"targets\": [\n        {\n          \"expr\": \"count by () ({namespace=\\\"monitoring\\\"} |~ \\\"(?i)(error|fail|exception|fatal)\\\" [5m])\",\n          \"legendFormat\": \"Errors (5m)\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"unit\": \"short\"\n        }\n      },\n      \"gridPos\": {\"h\": 4, \"w\": 6, \"x\": 12, \"y\": 0}\n    },\n    {\n      \"id\": 4,\n      \"title\": \"System Logs Available\",\n      \"type\": \"stat\",\n      \"targets\": [\n        {\n          \"expr\": \"count by () ({job=\\\"system\\\"})\",\n          \"legendFormat\": \"System Logs\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"thresholds\"},\n          \"thresholds\": {\n            \"steps\": [\n              {\"color\": \"red\", \"value\": null},\n              {\"color\": \"green\", \"value\": 1}\n            ]\n          },\n          \"mappings\": [\n            {\"options\": {\"0\": {\"text\": \"DOWN\"}}, \"type\": \"value\"},\n            {\"options\": {\"1\": {\"text\": \"UP\"}}, \"type\": \"value\"}\n          ]\n        }\n      },\n      \"gridPos\": {\"h\": 4, \"w\": 6, \"x\": 18, \"y\": 0}\n    },\n    {\n      \"id\": 5,\n      \"title\": \"Log Volume by Service\",\n      \"type\": \"timeseries\",\n      \"targets\": [\n        {\n          \"expr\": \"count by (app) (count_over_time({namespace=\\\"monitoring\\\"} [1m]))\",\n          \"legendFormat\": \"{{app}}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"custom\": {\n            \"drawStyle\": \"line\",\n            \"lineInterpolation\": \"linear\",\n            \"lineWidth\": 2,\n            \"fillOpacity\": 10\n          },\n          \"unit\": \"reqps\"\n        }\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 0, \"y\": 4}\n    },\n    {\n      \"id\": 6,\n      \"title\": \"Error Logs Over Time\",\n      \"type\": \"timeseries\",\n      \"targets\": [\n        {\n          \"expr\": \"count by (app) (count_over_time({namespace=\\\"monitoring\\\"} |~ \\\"(?i)(error|fail|exception|fatal)\\\" [1m]))\",\n          \"legendFormat\": \"{{app}} errors\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"custom\": {\n            \"drawStyle\": \"line\",\n            \"lineInterpolation\": \"linear\",\n            \"lineWidth\": 2,\n            \"fillOpacity\": 10\n          },\n          \"unit\": \"reqps\"\n        }\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 12, \"y\": 4}\n    },\n    {\n      \"id\": 7,\n      \"title\": \"Recent Log Entries by Service\",\n      \"type\": \"logs\",\n      \"targets\": [\n        {\n          \"expr\": \"{namespace=\\\"monitoring\\\"}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"options\": {\n        \"showTime\": true,\n        \"showLabels\": true,\n        \"showCommonLabels\": false,\n        \"wrapLogMessage\": true,\n        \"sortOrder\": \"Descending\"\n      },\n      \"gridPos\": {\"h\": 12, \"w\": 24, \"x\": 0, \"y\": 12}\n    },\n    {\n      \"id\": 8,\n      \"title\": \"System Logs (Host)\",\n      \"type\": \"logs\",\n      \"targets\": [\n        {\n          \"expr\": \"{job=\\\"system\\\"}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"options\": {\n        \"showTime\": true,\n        \"showLabels\": true,\n        \"showCommonLabels\": false,\n        \"wrapLogMessage\": true,\n        \"sortOrder\": \"Descending\"\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 0, \"y\": 24}\n    },\n    {\n      \"id\": 9,\n      \"title\": \"Alert/Error Log Entries\",\n      \"type\": \"logs\",\n      \"targets\": [\n        {\n          \"expr\": \"{namespace=\\\"monitoring\\\"} |~ \\\"(?i)(error|fail|exception|fatal|alert|warn)\\\"\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"options\": {\n        \"showTime\": true,\n        \"showLabels\": true,\n        \"showCommonLabels\": false,\n        \"wrapLogMessage\": true,\n        \"sortOrder\": \"Descending\"\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 12, \"y\": 24}\n    },\n    {\n      \"id\": 10,\n      \"title\": \"Service Status Overview\",\n      \"type\": \"table\",\n      \"targets\": [\n        {\n          \"expr\": \"{namespace=\\\"monitoring\\\"}\",\n          \"legendFormat\": \"\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"transformations\": [\n        {\n          \"id\": \"groupBy\",\n          \"options\": {\n            \"fields\": {\n              \"app\": {\n                \"aggregations\": [\"count\"],\n                \"operation\": \"groupby\"\n              }\n            }\n          }\n        }\n      ],\n      \"gridPos\": {\"h\": 8, \"w\": 24, \"x\": 0, \"y\": 32}\n    },\n    {\n      \"id\": 11,\n      \"title\": \"Prometheus Logs\",\n      \"type\": \"logs\",\n      \"targets\": [\n        {\n          \"expr\": \"{app=\\\"prometheus\\\"}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"options\": {\n        \"showTime\": true,\n        \"showLabels\": false,\n        \"wrapLogMessage\": true,\n        \"sortOrder\": \"Descending\"\n      },\n      \"gridPos\": {\"h\": 6, \"w\": 8, \"x\": 0, \"y\": 40}\n    },\n    {\n      \"id\": 12,\n      \"title\": \"Grafana Logs\",\n      \"type\": \"logs\",\n      \"targets\": [\n        {\n          \"expr\": \"{app=\\\"grafana\\\"}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"options\": {\n        \"showTime\": true,\n        \"showLabels\": false,\n        \"wrapLogMessage\": true,\n        \"sortOrder\": \"Descending\"\n      },\n      \"gridPos\": {\"h\": 6, \"w\": 8, \"x\": 8, \"y\": 40}\n    },\n    {\n      \"id\": 13,\n      \"title\": \"Loki Logs\",\n      \"type\": \"logs\",\n      \"targets\": [\n        {\n          \"expr\": \"{app=\\\"loki\\\"}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"options\": {\n        \"showTime\": true,\n        \"showLabels\": false,\n        \"wrapLogMessage\": true,\n        \"sortOrder\": \"Descending\"\n      },\n      \"gridPos\": {\"h\": 6, \"w\": 8, \"x\": 16, \"y\": 40}\n    }\n  ]\n}\n"},"kind":"ConfigMap","metadata":{"annotations":{},"labels":{"grafana_dashboard":"1"},"name":"comprehensive-logs-dashboard","namespace":"monitoring"}}
+  creationTimestamp: "2025-05-28T03:19:29Z"
+  labels:
+    grafana_dashboard: "1"
+  name: comprehensive-logs-dashboard
+  namespace: monitoring
+  resourceVersion: "13643"
+  uid: 78e49cf7-77dc-4d8e-a3c0-669d6c21925b

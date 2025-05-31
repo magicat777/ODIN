@@ -1,0 +1,403 @@
+<mxfile host="app.diagrams.net" modified="2025-05-31T18:00:00.000Z" agent="5.0" etag="abc123" version="24.4.8" type="device">
+  <diagram name="ODIN-Network" id="network-diagram">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        
+        <mxCell id="2" value="Application Layer (Layer 7)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="1080" height="120" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="3" value="External Services" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="60" y="70" width="250" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="4" value="Gmail SMTP&#xa;smtp.gmail.com:587&#xa;TLS/OAuth2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff99cc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="70" y="90" width="80" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="5" value="Claude API&#xa;api.anthropic.com:443&#xa;HTTPS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="160" y="90" width="80" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="6" value="Container Reg&#xa;gcr.io:443&#xa;HTTPS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="250" y="90" width="70" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="7" value="Client Access" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="340" y="70" width="300" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="8" value="Grafana&#xa;:31494&#xa;HTTP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcc99;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="350" y="90" width="60" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="9" value="Prometheus&#xa;:31493&#xa;HTTP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff9999;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="420" y="90" width="70" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="10" value="AlertMgr&#xa;:31495&#xa;HTTP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff99cc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="500" y="90" width="60" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="11" value="K8s API&#xa;:6443&#xa;HTTPS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="570" y="90" width="60" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="12" value="Monitoring Protocols" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffcc;strokeColor=#d6b656;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="670" y="70" width="430" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="13" value="Prom Metrics&#xa;HTTP /metrics&#xa;Pull-based" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff9999;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="680" y="90" width="80" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="14" value="Loki API&#xa;HTTP JSON&#xa;Push/Pull" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#99ccff;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="770" y="90" width="70" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="15" value="gRPC&#xa;K8s Binary&#xa;Service Disc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="850" y="90" width="70" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="16" value="Health HTTP&#xa;:8080/health&#xa;Status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="930" y="90" width="70" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="17" value="Custom ML&#xa;Anomaly JSON&#xa;Metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="90" width="80" height="50" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="18" value="Transport Layer (Layer 4)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="1080" height="180" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="19" value="Core Monitoring TCP" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfe2ff;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="60" y="230" width="200" height="130" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="20" value="Prometheus&#xa;:9090" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff9999;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="70" y="250" width="60" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="21" value="Grafana&#xa;:3000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcc99;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="140" y="250" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="22" value="Loki&#xa;:3100" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#99ccff;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="200" y="250" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="23" value="AlertMgr&#xa;:9093" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff99cc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="70" y="290" width="60" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="24" value="K8s API&#xa;:6443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="140" y="290" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="25" value="Kubelet&#xa;:10250" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="200" y="290" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="26" value="System Exporters TCP" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfe2ff;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="280" y="230" width="200" height="130" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="27" value="Node Exp&#xa;:9100" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="290" y="250" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="28" value="Power Exp&#xa;:9402" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="350" y="250" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="29" value="cAdvisor&#xa;:8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="410" y="250" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="30" value="Proc Exp&#xa;:9256" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="290" y="290" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="31" value="Razer Exp&#xa;:9403" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="350" y="290" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="32" value="KubeStat&#xa;:8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffcc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="410" y="290" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="33" value="ML Anomaly TCP" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfe2ff;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="500" y="230" width="200" height="130" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="34" value="GPU Anom&#xa;:9405" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="510" y="250" width="60" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="35" value="K8s Anom&#xa;:9406" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="580" y="250" width="60" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="36" value="Proc Anom&#xa;:9407" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="650" y="250" width="60" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="37" value="Custom TCP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcc99;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="510" y="290" width="50" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="38" value="Health :8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="570" y="290" width="60" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="39" value="Token :9408" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="640" y="290" width="60" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="40" value="UDP Services" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="720" y="230" width="180" height="130" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="41" value="DNS :53&#xa;Domain Queries" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="730" y="250" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="42" value="NTP :123&#xa;Time Sync" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="810" y="250" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="43" value="Syslog :514&#xa;Sys Logging" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="730" y="290" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="44" value="DHCP :68&#xa;IP Config" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="810" y="290" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="45" value="NodePorts" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffcc;strokeColor=#d6b656;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="920" y="230" width="180" height="130" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="46" value="31493→9090&#xa;Prometheus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff9999;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="930" y="250" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="47" value="31494→3000&#xa;Grafana" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcc99;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="250" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="48" value="31495→9093&#xa;AlertMgr" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff99cc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="930" y="290" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="49" value="6443→6443&#xa;K8s API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="290" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="50" value="Network Layer (Layer 3)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="420" width="1080" height="140" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="51" value="Host Network" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f5e8;strokeColor=#82b366;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="60" y="450" width="200" height="90" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="52" value="Host IP&#xa;192.168.1.154/24&#xa;enp110s0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="70" y="470" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="53" value="Gateway&#xa;192.168.1.1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="160" y="470" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="54" value="Loopback&#xa;127.0.0.1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="70" y="510" width="80" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="55" value="K8s Network" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f5e8;strokeColor=#82b366;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="280" y="450" width="280" height="90" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="56" value="Cluster IP&#xa;10.43.0.0/16&#xa;ClusterIP Svcs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="290" y="470" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="57" value="Pod CIDR&#xa;10.42.0.0/16&#xa;Pod Network" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="380" y="470" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="58" value="Flannel CNI&#xa;10.244.0.0/16&#xa;VXLAN" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="470" y="470" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="59" value="DNS Discovery&#xa;*.monitoring.svc.cluster.local" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="290" y="510" width="170" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="60" value="Routing" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f5e8;strokeColor=#82b366;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="580" y="450" width="200" height="90" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="61" value="Default Route&#xa;0.0.0.0/0→192.168.1.1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcc99;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="590" y="470" width="100" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="62" value="Local Route&#xa;192.168.1.0/24→eth0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="700" y="470" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="63" value="Firewall/NAT&#xa;iptables/ufw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="590" y="510" width="80" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="64" value="Security" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f5e8;strokeColor=#82b366;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="800" y="450" width="300" height="90" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="65" value="TLS/SSL&#xa;Encryption" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="810" y="470" width="60" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="66" value="OAuth2&#xa;Authentication" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff99cc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="880" y="470" width="70" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="67" value="Token Auth&#xa;API Keys" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcc99;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="960" y="470" width="60" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="68" value="SSH Keys&#xa;Public Key Auth" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="470" width="80" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="69" value="Data Link Layer (Layer 2)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="600" width="1080" height="80" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="70" value="Physical Interfaces" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fffacd;strokeColor=#d6b656;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="60" y="630" width="280" height="40" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="71" value="enp110s0&#xa;Gigabit Ethernet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="70" y="645" width="90" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="72" value="wlp0s20f3&#xa;WiFi 6 (Backup)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="170" y="645" width="90" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="73" value="Virtual Interfaces" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fffacd;strokeColor=#d6b656;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="360" y="630" width="320" height="40" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="74" value="cni0&#xa;K8s Bridge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="370" y="645" width="70" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="75" value="flannel.1&#xa;VXLAN" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="450" y="645" width="70" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="76" value="docker0&#xa;(Unused)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="530" y="645" width="60" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="77" value="Network Status" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fffacd;strokeColor=#d6b656;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="700" y="630" width="400" height="40" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="78" value="Link: UP&#xa;1000Mbps FDX" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="710" y="645" width="90" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="79" value="WiFi: -45dBm&#xa;Good Signal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="810" y="645" width="80" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="80" value="MAC Learning&#xa;ARP Table" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="900" y="645" width="80" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="81" value="Broadcast Domain&#xa;192.168.1.0/24" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffcc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="990" y="645" width="100" height="20" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="82" value="Physical Layer (Layer 1)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="720" width="1080" height="60" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="83" value="Hardware" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#b85450;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="60" y="745" width="400" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="84" value="Ethernet Port&#xa;RJ45" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="70" y="755" width="70" height="15" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="85" value="WiFi Radio&#xa;2.4/5GHz" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="150" y="755" width="70" height="15" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="86" value="Intel NIC&#xa;PCIe" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="230" y="755" width="60" height="15" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="87" value="Cat6 Cable&#xa;1000Base-T" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="300" y="755" width="80" height="15" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="88" value="Signal Quality" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#b85450;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="480" y="745" width="300" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="89" value="Electrical Signals&#xa;Differential Pairs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="490" y="755" width="100" height="15" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="90" value="RF Spectrum&#xa;802.11ac" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="600" y="755" width="80" height="15" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="91" value="Error Rate&#xa;<0.001%" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="690" y="755" width="80" height="15" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="92" value="Flow Arrows" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#b85450;fontSize=11;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="800" y="745" width="300" height="30" as="geometry"/>
+        </mxCell>
+        
+        <mxCell id="93" value="Layer 7→4" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#f8cecc;strokeColor=#b85450;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="820" y="755" as="sourcePoint"/>
+            <mxPoint x="860" y="755" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="94" value="Layer 4→3" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#dae8fc;strokeColor=#6c8ebf;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="880" y="755" as="sourcePoint"/>
+            <mxPoint x="920" y="755" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="95" value="Layer 3→2" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#d5e8d4;strokeColor=#82b366;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="940" y="755" as="sourcePoint"/>
+            <mxPoint x="980" y="755" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="96" value="Layer 2→1" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#fff2cc;strokeColor=#d6b656;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1000" y="755" as="sourcePoint"/>
+            <mxPoint x="1040" y="755" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

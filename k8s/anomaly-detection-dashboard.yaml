@@ -1,0 +1,447 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: anomaly-detection-dashboard
+  namespace: monitoring
+data:
+  anomaly-detection.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "anomaly-detection",
+        "title": "ODIN ML Anomaly Detection",
+        "tags": ["anomaly", "ml", "ai"],
+        "timezone": "browser",
+        "schemaVersion": 38,
+        "version": 1,
+        "refresh": "30s",
+        "time": {
+          "from": "now-3h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+            "id": 1,
+            "type": "text",
+            "title": "Anomaly Detection Overview",
+            "options": {
+              "mode": "markdown",
+              "content": "# ML-Based Anomaly Detection\n\nThis dashboard shows anomaly scores for key metrics using machine learning algorithms:\n- **Isolation Forest**: For complex patterns (GPU, network)\n- **Statistical Methods**: For simpler metrics (CPU, memory)\n\n**Scoring**: 0 = Normal, 100 = Highly Anomalous"
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+            "id": 2,
+            "type": "graph",
+            "title": "GPU Temperature Anomaly Score",
+            "targets": [
+              {
+                "expr": "anomaly_score{metric_name=\"nvidia_gpu_temperature_celsius\"}",
+                "legendFormat": "Anomaly Score",
+                "refId": "A"
+              },
+              {
+                "expr": "nvidia_gpu_temperature_celsius",
+                "legendFormat": "Temperature (°C)",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Score / Temperature",
+                "show": true
+              },
+              {
+                "format": "short",
+                "show": false
+              }
+            ],
+            "thresholds": [
+              {
+                "value": 60,
+                "op": "gt",
+                "fill": true,
+                "line": true,
+                "colorMode": "custom",
+                "fillColor": "rgba(255, 152, 48, 0.2)",
+                "lineColor": "rgba(255, 152, 48, 1)"
+              },
+              {
+                "value": 80,
+                "op": "gt",
+                "fill": true,
+                "line": true,
+                "colorMode": "custom",
+                "fillColor": "rgba(242, 73, 92, 0.2)",
+                "lineColor": "rgba(242, 73, 92, 1)"
+              }
+            ],
+            "alert": {
+              "name": "GPU Temperature Anomaly",
+              "conditions": [
+                {
+                  "evaluator": {
+                    "params": [80],
+                    "type": "gt"
+                  },
+                  "operator": {
+                    "type": "and"
+                  },
+                  "query": {
+                    "params": ["A", "5m", "now"]
+                  },
+                  "reducer": {
+                    "params": [],
+                    "type": "avg"
+                  },
+                  "type": "query"
+                }
+              ],
+              "noDataState": "no_data",
+              "executionErrorState": "alerting",
+              "frequency": "60s",
+              "handler": 1,
+              "message": "GPU temperature showing anomalous behavior"
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+            "id": 3,
+            "type": "graph",
+            "title": "GPU Power Draw Anomaly Score",
+            "targets": [
+              {
+                "expr": "anomaly_score{metric_name=\"nvidia_gpu_power_draw_watts\"}",
+                "legendFormat": "Anomaly Score",
+                "refId": "A"
+              },
+              {
+                "expr": "nvidia_gpu_power_draw_watts",
+                "legendFormat": "Power Draw (W)",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Score / Watts",
+                "show": true
+              },
+              {
+                "format": "short",
+                "show": false
+              }
+            ],
+            "thresholds": [
+              {
+                "value": 60,
+                "op": "gt",
+                "fill": true,
+                "line": true,
+                "colorMode": "custom",
+                "fillColor": "rgba(255, 152, 48, 0.2)",
+                "lineColor": "rgba(255, 152, 48, 1)"
+              },
+              {
+                "value": 80,
+                "op": "gt",
+                "fill": true,
+                "line": true,
+                "colorMode": "custom",
+                "fillColor": "rgba(242, 73, 92, 0.2)",
+                "lineColor": "rgba(242, 73, 92, 1)"
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+            "id": 4,
+            "type": "graph",
+            "title": "Memory Availability Anomaly Score",
+            "targets": [
+              {
+                "expr": "anomaly_score{metric_name=\"node_memory_MemAvailable_bytes\"}",
+                "legendFormat": "Anomaly Score",
+                "refId": "A"
+              },
+              {
+                "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+                "legendFormat": "Memory Usage %",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "percent",
+                "label": "Score / Usage %",
+                "show": true
+              },
+              {
+                "format": "short",
+                "show": false
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+            "id": 5,
+            "type": "graph",
+            "title": "Network Traffic Anomaly Score",
+            "targets": [
+              {
+                "expr": "anomaly_score{metric_name=\"rate(node_network_receive_bytes_total[5m])\"}",
+                "legendFormat": "Anomaly Score",
+                "refId": "A"
+              },
+              {
+                "expr": "rate(node_network_receive_bytes_total{device=\"enp110s0\"}[5m]) / 1024 / 1024",
+                "legendFormat": "Network RX (MB/s)",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Score / MB/s",
+                "show": true
+              },
+              {
+                "format": "short",
+                "show": false
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22},
+            "id": 6,
+            "type": "table",
+            "title": "Current Anomaly Status",
+            "targets": [
+              {
+                "expr": "anomaly_score",
+                "format": "table",
+                "instant": true,
+                "refId": "A"
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true,
+                    "__name__": true,
+                    "job": true,
+                    "instance": true
+                  },
+                  "renameByName": {
+                    "metric_name": "Metric",
+                    "algorithm": "Algorithm",
+                    "Value": "Anomaly Score"
+                  }
+                }
+              },
+              {
+                "id": "sortBy",
+                "options": {
+                  "fields": {},
+                  "sort": [
+                    {
+                      "field": "Anomaly Score",
+                      "desc": true
+                    }
+                  ]
+                }
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "align": "center",
+                  "displayMode": "color-background-solid"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 60
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "mappings": [],
+                "unit": "short"
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Anomaly Score"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.displayMode",
+                      "value": "gradient-gauge"
+                    },
+                    {
+                      "id": "min",
+                      "value": 0
+                    },
+                    {
+                      "id": "max",
+                      "value": 100
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
+            "id": 7,
+            "type": "stat",
+            "title": "Anomaly Detection Health",
+            "targets": [
+              {
+                "expr": "anomaly_detector_health",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                },
+                "mappings": [
+                  {
+                    "options": {
+                      "0": {
+                        "text": "Unhealthy",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "Healthy",
+                        "color": "green"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ],
+                "unit": "short"
+              }
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
+            "id": 8,
+            "type": "graph",
+            "title": "Model Updates",
+            "targets": [
+              {
+                "expr": "rate(anomaly_model_updates_total[1h])",
+                "legendFormat": "{{ metric_name }}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Updates/hour",
+                "show": true
+              },
+              {
+                "format": "short",
+                "show": false
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 38},
+            "id": 9,
+            "type": "graph",
+            "title": "Dynamic Thresholds",
+            "targets": [
+              {
+                "expr": "anomaly_threshold{type=\"upper_bound\"}",
+                "legendFormat": "{{ metric_name }} - Upper",
+                "refId": "A"
+              },
+              {
+                "expr": "anomaly_threshold{type=\"lower_bound\"}",
+                "legendFormat": "{{ metric_name }} - Lower",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Threshold Value",
+                "show": true
+              },
+              {
+                "format": "short",
+                "show": false
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 38},
+            "id": 10,
+            "type": "heatmap",
+            "title": "Anomaly Score Heatmap",
+            "targets": [
+              {
+                "expr": "anomaly_score",
+                "format": "time_series",
+                "refId": "A"
+              }
+            ],
+            "dataFormat": "timeseries",
+            "yAxis": {
+              "format": "short",
+              "decimals": 0,
+              "show": true
+            },
+            "xAxis": {
+              "show": true
+            },
+            "colorScheme": "interpolateRdYlGn",
+            "reverseYBuckets": false,
+            "color": {
+              "mode": "spectrum",
+              "scheme": "interpolateRdYlGn",
+              "reverse": true
+            }
+          }
+        ]
+      }
+    }

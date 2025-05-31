@@ -1,0 +1,203 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-exporter-script
+  namespace: monitoring
+data:
+  network-exporter.py: |
+    #!/usr/bin/env python3
+    import os
+    import time
+    import subprocess
+    import re
+    from collections import defaultdict
+    from prometheus_client import start_http_server, Gauge, Counter
+    
+    # Define Prometheus metrics
+    process_network_rx_bytes = Counter('process_network_receive_bytes_total', 'Network bytes received by process', ['process', 'pid'])
+    process_network_tx_bytes = Counter('process_network_transmit_bytes_total', 'Network bytes transmitted by process', ['process', 'pid'])
+    process_network_connections = Gauge('process_network_connections', 'Number of network connections by process', ['process', 'pid', 'state'])
+    process_network_rx_packets = Counter('process_network_receive_packets_total', 'Network packets received by process', ['process', 'pid'])
+    process_network_tx_packets = Counter('process_network_transmit_packets_total', 'Network packets transmitted by process', ['process', 'pid'])
+    
+    def get_process_name(pid):
+        """Get process name from PID"""
+        try:
+            with open(f'/proc/{pid}/comm', 'r') as f:
+                return f.read().strip()
+        except:
+            return "unknown"
+    
+    def parse_ss_output():
+        """Parse ss command output for network statistics per process"""
+        try:
+            # Get detailed socket statistics with process info
+            result = subprocess.run(['ss', '-tuanp'], capture_output=True, text=True)
+            if result.returncode != 0:
+                return {}
+            
+            connections = defaultdict(lambda: defaultdict(int))
+            
+            for line in result.stdout.split('\n')[1:]:  # Skip header
+                if not line:
+                    continue
+                    
+                parts = line.split()
+                if len(parts) < 7:
+                    continue
+                
+                state = parts[1]
+                
+                # Extract process info from last column (e.g., "users:(("chrome",pid=1234,fd=45))")
+                process_match = re.search(r'users:\(\("([^"]+)",pid=(\d+)', line)
+                if process_match:
+                    process_name = process_match.group(1)
+                    pid = process_match.group(2)
+                    
+                    connections[(process_name, pid)][state] += 1
+            
+            return connections
+        except Exception as e:
+            print(f"Error parsing ss output: {e}")
+            return {}
+    
+    def get_network_stats_from_nethogs():
+        """Get per-process network bandwidth using nethogs in batch mode"""
+        try:
+            # Run nethogs in batch mode for 2 seconds
+            result = subprocess.run(['nethogs', '-t', '-c', '2'], capture_output=True, text=True)
+            if result.returncode != 0:
+                return {}
+            
+            stats = {}
+            for line in result.stdout.split('\n'):
+                if not line or line.startswith('Refreshing'):
+                    continue
+                
+                parts = line.split('\t')
+                if len(parts) >= 3:
+                    process_path = parts[0]
+                    sent_kb = float(parts[1])
+                    recv_kb = float(parts[2])
+                    
+                    # Extract process name from path
+                    process_name = os.path.basename(process_path.split()[0]) if process_path else "unknown"
+                    
+                    stats[process_name] = {
+                        'sent_bytes': sent_kb * 1024,
+                        'recv_bytes': recv_kb * 1024
+                    }
+            
+            return stats
+        except Exception as e:
+            print(f"Error getting nethogs stats: {e}")
+            return {}
+    
+    def collect_network_metrics():
+        """Collect network metrics per process"""
+        # Get connection counts
+        connections = parse_ss_output()
+        for (process, pid), states in connections.items():
+            for state, count in states.items():
+                process_network_connections.labels(process=process, pid=pid, state=state).set(count)
+        
+        # Try to get bandwidth stats (requires nethogs)
+        bandwidth_stats = get_network_stats_from_nethogs()
+        for process, stats in bandwidth_stats.items():
+            # For bandwidth stats, we don't have PID from nethogs
+            process_network_tx_bytes.labels(process=process, pid="0").inc(stats['sent_bytes'])
+            process_network_rx_bytes.labels(process=process, pid="0").inc(stats['recv_bytes'])
+    
+    if __name__ == '__main__':
+        # Start Prometheus metrics server
+        start_http_server(9403)
+        
+        print("Network exporter started on port 9403")
+        
+        # Collect metrics every 10 seconds
+        while True:
+            try:
+                collect_network_metrics()
+            except Exception as e:
+                print(f"Error collecting metrics: {e}")
+            time.sleep(10)
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: network-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: network-exporter
+  template:
+    metadata:
+      labels:
+        app: network-exporter
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: network-exporter
+        image: python:3.10-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          apt-get update && apt-get install -y iproute2 nethogs procps
+          pip install prometheus_client
+          python /scripts/network-exporter.py
+        ports:
+        - containerPort: 9403
+          hostPort: 9403
+          name: metrics
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: proc
+          mountPath: /proc
+          readOnly: true
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+            - SYS_ADMIN
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: script
+        configMap:
+          name: network-exporter-script
+          defaultMode: 0755
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: network-exporter
+  namespace: monitoring
+  labels:
+    app: network-exporter
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9403
+    targetPort: 9403
+  selector:
+    app: network-exporter

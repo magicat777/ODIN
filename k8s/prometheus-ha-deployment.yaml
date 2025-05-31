@@ -1,0 +1,216 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: local-storage
+---
+# Enhanced StatefulSet for better reliability
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  serviceName: prometheus-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      initContainers:
+      - name: init-chown-data
+        image: busybox:latest
+        command: ["sh", "-c", "mkdir -p /prometheus && chmod 755 /prometheus"]
+        volumeMounts:
+        - name: storage
+          mountPath: /prometheus
+        securityContext:
+          runAsUser: 65534
+          runAsGroup: 65534
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.40.0
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus/'
+          - '--web.enable-lifecycle'
+          - '--storage.tsdb.retention.time=90d'
+          - '--storage.tsdb.retention.size=40GB'
+          - '--storage.tsdb.wal-compression'
+          - '--web.enable-admin-api'
+          - '--web.external-url=http://localhost:31493'
+          - '--web.route-prefix=/'
+          - '--storage.tsdb.no-lockfile'
+          - '--query.max-concurrency=50'
+          - '--query.timeout=2m'
+        ports:
+        - name: web
+          containerPort: 9090
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: gpu-alert-rules
+          mountPath: /etc/prometheus/rules/gpu
+        - name: power-exporter-alert-rules
+          mountPath: /etc/prometheus/rules/power-exporter
+        - name: claude-code-alert-rules
+          mountPath: /etc/prometheus/rules/claude-code
+        - name: k3s-alert-rules
+          mountPath: /etc/prometheus/rules/k3s
+        - name: odin-stack-alert-rules
+          mountPath: /etc/prometheus/rules/odin-stack
+        - name: anomaly-alert-rules
+          mountPath: /etc/prometheus/rules/anomaly
+        - name: storage
+          mountPath: /prometheus
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 4
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+      terminationGracePeriodSeconds: 300
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: gpu-alert-rules
+        configMap:
+          name: gpu-alert-rules
+      - name: power-exporter-alert-rules
+        configMap:
+          name: power-exporter-alert-rules
+      - name: claude-code-alert-rules
+        configMap:
+          name: claude-code-alert-rules
+      - name: k3s-alert-rules
+        configMap:
+          name: k3s-alert-rules
+      - name: odin-stack-alert-rules
+        configMap:
+          name: odin-stack-alert-rules
+      - name: anomaly-alert-rules
+        configMap:
+          name: anomaly-alert-rules
+      - name: storage
+        persistentVolumeClaim:
+          claimName: prometheus-pvc
+---
+# Headless service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-headless
+  namespace: monitoring
+spec:
+  clusterIP: None
+  selector:
+    app: prometheus
+  ports:
+  - name: web
+    port: 9090
+    targetPort: 9090
+---
+# Main service (unchanged)
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+spec:
+  selector:
+    app: prometheus
+  ports:
+  - name: web
+    port: 9090
+    targetPort: 9090
+    nodePort: 31493
+  type: NodePort

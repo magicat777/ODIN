@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: anomaly-alert-rules
+  namespace: monitoring
+data:
+  anomaly-alerts.yaml: |
+    groups:
+    - name: anomaly_detection_alerts
+      interval: 30s
+      rules:
+      # High anomaly scores
+      - alert: HighAnomalyScore
+        expr: anomaly_score > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: anomaly-detection
+        annotations:
+          summary: "High anomaly score detected"
+          description: "{{ $labels.metric_name }} has anomaly score of {{ $value }} (algorithm: {{ $labels.algorithm }})"
+          
+      - alert: CriticalAnomalyScore
+        expr: anomaly_score > 95
+        for: 2m
+        labels:
+          severity: critical
+          component: anomaly-detection
+        annotations:
+          summary: "Critical anomaly detected"
+          description: "{{ $labels.metric_name }} has critical anomaly score of {{ $value }} - immediate investigation required"
+          
+      # GPU-specific anomalies
+      - alert: GPUTemperatureAnomaly
+        expr: anomaly_score{metric_name="nvidia_gpu_temperature_celsius"} > 70 and nvidia_gpu_temperature_celsius > 75
+        for: 3m
+        labels:
+          severity: warning
+          component: gpu
+          anomaly: true
+        annotations:
+          summary: "GPU temperature anomaly detected"
+          description: "GPU temperature is {{ $labels.nvidia_gpu_temperature_celsius }}°C with anomaly score {{ $value }}"
+          
+      - alert: GPUPowerAnomaly
+        expr: anomaly_score{metric_name="nvidia_gpu_power_draw_watts"} > 70
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+          anomaly: true
+        annotations:
+          summary: "GPU power draw anomaly detected"
+          description: "GPU power consumption showing unusual pattern (score: {{ $value }})"
+          
+      # Network anomalies
+      - alert: NetworkTrafficAnomaly
+        expr: anomaly_score{metric_name="rate(node_network_receive_bytes_total[5m])"} > 75
+        for: 5m
+        labels:
+          severity: warning
+          component: network
+          anomaly: true
+        annotations:
+          summary: "Network traffic anomaly detected"
+          description: "Network receive traffic showing unusual pattern (score: {{ $value }})"
+          
+      # Memory anomalies
+      - alert: MemoryUsageAnomaly
+        expr: anomaly_score{metric_name="node_memory_MemAvailable_bytes"} > 75
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+          anomaly: true
+        annotations:
+          summary: "Memory usage anomaly detected"
+          description: "Memory availability showing unusual pattern (score: {{ $value }})"
+          
+      # Claude API anomalies
+      - alert: ClaudeAPIUsageAnomaly
+        expr: anomaly_score{metric_name="claude_code_api_requests_total"} > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: claude-code
+          anomaly: true
+        annotations:
+          summary: "Claude API usage anomaly detected"
+          description: "Claude API request pattern is unusual (score: {{ $value }})"
+          
+      # Anomaly detector health
+      - alert: AnomalyDetectorDown
+        expr: up{job="anomaly-detector"} == 0 or absent(up{job="anomaly-detector"})
+        for: 5m
+        labels:
+          severity: critical
+          component: anomaly-detection
+        annotations:
+          summary: "Anomaly detector is down"
+          description: "ML anomaly detection service is not responding"
+          
+      - alert: AnomalyDetectorUnhealthy
+        expr: anomaly_detector_health != 1
+        for: 5m
+        labels:
+          severity: warning
+          component: anomaly-detection
+        annotations:
+          summary: "Anomaly detector is unhealthy"
+          description: "ML anomaly detection service is experiencing issues"
+          
+      - alert: AnomalyDetectionErrors
+        expr: rate(anomaly_detection_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: anomaly-detection
+        annotations:
+          summary: "Anomaly detection errors"
+          description: "Anomaly detector is experiencing {{ $value }} errors per second for {{ $labels.metric_name }}"
+          
+      # Correlation alerts
+      - alert: MultipleAnomaliesDetected
+        expr: count(anomaly_score > 70) > 3
+        for: 5m
+        labels:
+          severity: critical
+          component: anomaly-detection
+        annotations:
+          summary: "Multiple anomalies detected simultaneously"
+          description: "{{ $value }} metrics are showing anomalous behavior - possible system-wide issue"
+          
+      - alert: GPUAndPowerAnomaly
+        expr: |
+          (anomaly_score{metric_name="nvidia_gpu_temperature_celsius"} > 60) 
+          and 
+          (anomaly_score{metric_name="nvidia_gpu_power_draw_watts"} > 60)
+        for: 5m
+        labels:
+          severity: critical
+          component: gpu
+          anomaly: true
+        annotations:
+          summary: "Correlated GPU anomalies detected"
+          description: "Both GPU temperature and power draw are showing anomalous patterns - possible hardware issue"

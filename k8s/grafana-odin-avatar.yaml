@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-odin-avatar
+  namespace: monitoring
+data:
+  odin-avatar.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+      <defs>
+        <linearGradient id="avatarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#00ff88;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#0099ff;stop-opacity:1" />
+        </linearGradient>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+      
+      <!-- Background circle -->
+      <circle cx="128" cy="128" r="120" fill="#1a1a1a" stroke="url(#avatarGrad)" stroke-width="4"/>
+      
+      <!-- ODIN text -->
+      <text x="128" y="145" font-family="Arial Black, sans-serif" font-size="60" font-weight="900" 
+            text-anchor="middle" fill="url(#avatarGrad)" filter="url(#glow)">ODIN</text>
+      
+      <!-- Network nodes -->
+      <circle cx="50" cy="50" r="8" fill="#00ff88" opacity="0.8"/>
+      <circle cx="206" cy="50" r="8" fill="#0099ff" opacity="0.8"/>
+      <circle cx="50" cy="206" r="6" fill="#00ff88" opacity="0.6"/>
+      <circle cx="206" cy="206" r="6" fill="#0099ff" opacity="0.6"/>
+      
+      <!-- Connection lines -->
+      <line x1="58" y1="50" x2="198" y2="50" stroke="#333" stroke-width="2" opacity="0.5"/>
+      <line x1="50" y1="58" x2="50" y2="198" stroke="#333" stroke-width="2" opacity="0.5"/>
+      <line x1="206" y1="58" x2="206" y2="198" stroke="#333" stroke-width="2" opacity="0.5"/>
+      <line x1="58" y1="206" x2="198" y2="206" stroke="#333" stroke-width="2" opacity="0.5"/>
+    </svg>
+  odin-avatar.png: |
+    iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAABNJSURBVHgB7d1/jFxnecfx95mZtWM7thPHcRI7tpM4aUqAUlogtKG0QC9FakGiVVuhtlypQi1S1UpVpUpVpf6BVKlSVamqVKkqUitRtRJSgQpKC0gUKLRcLqG0hITSJE1iu3bs+Eds7/rH7s48/WNmvbO7M7tz5pz3nPec834kK/Zud2fPzJnv+z7P+zzPCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA

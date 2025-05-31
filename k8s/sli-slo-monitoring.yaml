@@ -1,0 +1,223 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sli-slo-rules
+  namespace: monitoring
+data:
+  sli-slo-rules.yml: |
+    groups:
+    - name: odin_sli_recording_rules
+      interval: 30s
+      rules:
+      # ODIN Stack Availability SLI
+      - record: odin:sli:availability
+        expr: |
+          avg_over_time(up{job=~"prometheus|grafana|alertmanager|loki"}[5m])
+        labels:
+          sli_type: availability
+          service: odin-core
+          
+      # ODIN Stack Error Rate SLI  
+      - record: odin:sli:error_rate
+        expr: |
+          (
+            rate(prometheus_http_requests_total{code=~"5.."}[5m]) +
+            rate(grafana_http_request_duration_seconds_count{status_code=~"5.."}[5m])
+          ) / (
+            rate(prometheus_http_requests_total[5m]) +
+            rate(grafana_http_request_duration_seconds_count[5m])
+          )
+        labels:
+          sli_type: error_rate
+          service: odin-core
+          
+      # ODIN Stack Response Time SLI (95th percentile)
+      - record: odin:sli:latency_p95
+        expr: |
+          histogram_quantile(0.95,
+            rate(prometheus_http_request_duration_seconds_bucket[5m]) +
+            rate(grafana_http_request_duration_seconds_bucket[5m])
+          )
+        labels:
+          sli_type: latency
+          service: odin-core
+          
+      # GPU Monitoring Availability SLI
+      - record: odin:sli:gpu_monitoring_availability
+        expr: |
+          avg_over_time(up{job=~"razer-exporter|power-exporter"}[5m])
+        labels:
+          sli_type: availability
+          service: gpu-monitoring
+          
+      # Log Ingestion SLI
+      - record: odin:sli:log_ingestion_success_rate
+        expr: |
+          rate(loki_ingester_streams_created_total[5m]) / 
+          (rate(loki_ingester_streams_created_total[5m]) + rate(loki_ingester_streams_failed_total[5m]))
+        labels:
+          sli_type: success_rate
+          service: log-ingestion
+          
+      # Service Discovery Health SLI
+      - record: odin:sli:service_discovery_health
+        expr: |
+          (
+            sum(up{job="kubernetes-service-discovery"}) /
+            count(up{job="kubernetes-service-discovery"})
+          )
+        labels:
+          sli_type: availability
+          service: service-discovery
+          
+    - name: odin_slo_alerting_rules
+      rules:
+      # SLO: 99.5% availability for core ODIN services
+      - alert: OdinCoreSLOBreach
+        expr: |
+          (
+            odin:sli:availability{service="odin-core"} < 0.995
+          ) and (
+            odin:sli:availability{service="odin-core"} offset 5m < 0.995
+          )
+        for: 2m
+        labels:
+          severity: critical
+          slo: "99.5%"
+          service: odin-core
+          component: sli-slo
+        annotations:
+          summary: "ODIN Core SLO breach - Availability below 99.5%"
+          description: "ODIN core services availability is {{ $value | humanizePercentage }} (below 99.5% SLO)"
+          runbook_url: "https://github.com/your-org/odin/wiki/runbooks/slo-breach"
+          
+      # SLO: Error rate below 1% 
+      - alert: OdinCoreErrorRateSLOBreach
+        expr: |
+          odin:sli:error_rate{service="odin-core"} > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          slo: "1%"
+          service: odin-core
+          component: sli-slo
+        annotations:
+          summary: "ODIN Core error rate SLO breach"
+          description: "ODIN core services error rate is {{ $value | humanizePercentage }} (above 1% SLO)"
+          
+      # SLO: 95th percentile response time below 2 seconds
+      - alert: OdinCoreLatencySLOBreach
+        expr: |
+          odin:sli:latency_p95{service="odin-core"} > 2
+        for: 10m
+        labels:
+          severity: warning
+          slo: "2s"
+          service: odin-core
+          component: sli-slo
+        annotations:
+          summary: "ODIN Core latency SLO breach"
+          description: "ODIN core services 95th percentile latency is {{ $value }}s (above 2s SLO)"
+          
+      # SLO: GPU monitoring 98% availability
+      - alert: OdinGPUMonitoringSLOBreach
+        expr: |
+          odin:sli:gpu_monitoring_availability{service="gpu-monitoring"} < 0.98
+        for: 15m
+        labels:
+          severity: warning
+          slo: "98%"
+          service: gpu-monitoring
+          component: sli-slo
+        annotations:
+          summary: "GPU monitoring SLO breach"
+          description: "GPU monitoring availability is {{ $value | humanizePercentage }} (below 98% SLO)"
+          
+      # SLO: Log ingestion 99% success rate
+      - alert: OdinLogIngestionSLOBreach
+        expr: |
+          odin:sli:log_ingestion_success_rate{service="log-ingestion"} < 0.99
+        for: 10m
+        labels:
+          severity: warning
+          slo: "99%"
+          service: log-ingestion
+          component: sli-slo
+        annotations:
+          summary: "Log ingestion SLO breach"
+          description: "Log ingestion success rate is {{ $value | humanizePercentage }} (below 99% SLO)"
+          
+      # Service Discovery Health SLO
+      - alert: OdinServiceDiscoverySLOBreach
+        expr: |
+          odin:sli:service_discovery_health{service="service-discovery"} < 0.95
+        for: 5m
+        labels:
+          severity: warning
+          slo: "95%"
+          service: service-discovery
+          component: sli-slo
+        annotations:
+          summary: "Service discovery SLO breach"
+          description: "Service discovery health is {{ $value | humanizePercentage }} (below 95% SLO)"
+          
+    - name: odin_burn_rate_alerts
+      rules:
+      # Fast burn rate alert (1% budget in 1 hour = 2% budget in 5m)
+      - alert: OdinSLOFastBurn
+        expr: |
+          (
+            odin:sli:availability{service="odin-core"} < (1 - 14.4 * 0.005)  # 2.8% error budget burn in 5m
+          )
+        for: 2m
+        labels:
+          severity: critical
+          burn_rate: fast
+          service: odin-core
+          component: sli-slo
+        annotations:
+          summary: "ODIN SLO fast burn rate detected"
+          description: "ODIN availability {{ $value | humanizePercentage }} indicates fast error budget burn"
+          
+      # Slow burn rate alert (5% budget in 6 hours = 0.83% in 1h)  
+      - alert: OdinSLOSlowBurn
+        expr: |
+          (
+            odin:sli:availability{service="odin-core"} < (1 - 6 * 0.005)  # 3% error budget burn in 1h
+          )
+        for: 15m
+        labels:
+          severity: warning
+          burn_rate: slow
+          service: odin-core
+          component: sli-slo
+        annotations:
+          summary: "ODIN SLO slow burn rate detected"
+          description: "ODIN availability {{ $value | humanizePercentage }} indicates slow error budget burn"
+---
+# Add SLI/SLO rules to Prometheus
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: add-sli-slo-rules
+  namespace: monitoring
+spec:
+  template:
+    spec:
+      containers:
+      - name: kubectl
+        image: bitnami/kubectl:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            # Add SLI/SLO rules to prometheus config
+            kubectl patch configmap prometheus-config -n monitoring --type='merge' -p='{
+              "data": {
+                "prometheus.yml": "global:\n  scrape_interval: 15s\n  evaluation_interval: 15s\n\n# AlertManager configuration\nalerting:\n  alertmanagers:\n    - static_configs:\n        - targets: [\"alertmanager:9093\"]\n\nrule_files:\n  - \"/etc/prometheus/rules/gpu/*.yaml\"\n  - \"/etc/prometheus/rules/power-exporter/*.yaml\"\n  - \"/etc/prometheus/rules/claude-code/*.yaml\"\n  - \"/etc/prometheus/rules/k3s/*.yaml\"\n  - \"/etc/prometheus/rules/odin-stack/*.yaml\"\n  - \"/etc/prometheus/rules/anomaly/*.yaml\"\n  - \"/etc/prometheus/rules/sli-slo/*.yaml\"\n\nscrape_configs:\n- job_name: \"prometheus\"\n  static_configs:\n  - targets: [\"localhost:9090\"]\n\n- job_name: \"kubernetes-service-discovery\"\n  kubernetes_sd_configs:\n  - role: service\n    namespaces:\n      names: [\"monitoring\"]\n  relabel_configs:\n  - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]\n    action: keep\n    regex: true\n  - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_service_annotation_prometheus_io_port]\n    action: replace\n    target_label: __address__\n    regex: (.+);(.+);(.+)\n    replacement: $2.$1.svc.cluster.local:$3\n\n- job_name: \"node-exporter\"\n  static_configs:\n  - targets: [\"192.168.1.154:9100\"]\n\n- job_name: \"cadvisor\"\n  static_configs:\n  - targets: [\"cadvisor:8080\"]\n\n- job_name: \"alertmanager\"\n  static_configs:\n  - targets: [\"alertmanager:9093\"]\n\n- job_name: \"grafana\"\n  static_configs:\n  - targets: [\"grafana:3000\"]\n\n- job_name: \"kube-state-metrics\"\n  static_configs:\n  - targets: [\"kube-state-metrics:8080\"]\n\n- job_name: \"nvidia-dcgm\"\n  static_configs:\n  - targets: [\"nvidia-dcgm-exporter:9400\"]\n\n- job_name: \"process-exporter\"\n  static_configs:\n  - targets: [\"process-exporter:9256\"]\n\n- job_name: \"razer-exporter\"\n  static_configs:\n  - targets: [\"razer-exporter:9401\"]\n\n- job_name: \"power-exporter\"\n  static_configs:\n  - targets: [\"192.168.1.154:9836\"]\n\n- job_name: \"claude-code-exporter\"\n  static_configs:\n  - targets: [\"claude-code-exporter:9403\"]\n\n- job_name: \"claude-token-collector\"\n  static_configs:\n  - targets: [\"claude-token-collector:9404\"]\n\n- job_name: \"network-exporter\"\n  static_configs:\n  - targets: [\"network-exporter:9403\"]\n\n- job_name: \"anomaly-detector\"\n  static_configs:\n  - targets: [\"anomaly-detector-v2:9405\"]\n\n- job_name: \"anomaly-detector-v3\"\n  static_configs:\n  - targets: [\"anomaly-detector-v3:9405\"]\n\n- job_name: \"loki\"\n  static_configs:\n  - targets: [\"loki:3100\"]\n\n- job_name: \"promtail\"\n  static_configs:\n  - targets: [\"promtail:9080\"]\n"
+              }
+            }'
+            echo "Added SLI/SLO rules path to Prometheus config"
+      restartPolicy: Never
+      serviceAccountName: default
+  backoffLimit: 3

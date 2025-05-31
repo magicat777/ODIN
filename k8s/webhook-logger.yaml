@@ -1,0 +1,182 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webhook-logger-script
+  namespace: monitoring
+data:
+  webhook-logger.py: |
+    #!/usr/bin/env python3
+    import json
+    import logging
+    from datetime import datetime
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import base64
+    import os
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('/var/log/webhook-alerts.log'),
+            logging.StreamHandler()
+        ]
+    )
+
+    logger = logging.getLogger(__name__)
+
+    class WebhookHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            try:
+                # Basic auth check
+                auth_header = self.headers.get('Authorization', '')
+                if auth_header.startswith('Basic '):
+                    encoded_creds = auth_header.split(' ')[1]
+                    decoded_creds = base64.b64decode(encoded_creds).decode('utf-8')
+                    username, password = decoded_creds.split(':', 1)
+                    if username != 'odin' or password != 'monitoring':
+                        self.send_response(401)
+                        self.end_headers()
+                        return
+                else:
+                    self.send_response(401)
+                    self.end_headers()
+                    return
+
+                # Read the request body
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                
+                # Parse JSON
+                alert_data = json.loads(post_data.decode('utf-8'))
+                
+                # Log the alert
+                timestamp = datetime.now().isoformat()
+                endpoint = self.path
+                
+                logger.info(f"=== ALERT RECEIVED [{timestamp}] ===")
+                logger.info(f"Endpoint: {endpoint}")
+                logger.info(f"Status: {alert_data.get('status', 'unknown')}")
+                
+                # Log each alert
+                for alert in alert_data.get('alerts', []):
+                    alert_name = alert.get('labels', {}).get('alertname', 'Unknown')
+                    severity = alert.get('labels', {}).get('severity', 'unknown')
+                    summary = alert.get('annotations', {}).get('summary', 'No summary')
+                    description = alert.get('annotations', {}).get('description', 'No description')
+                    
+                    logger.info(f"  Alert: {alert_name}")
+                    logger.info(f"  Severity: {severity}")
+                    logger.info(f"  Summary: {summary}")
+                    logger.info(f"  Description: {description}")
+                    logger.info(f"  Labels: {json.dumps(alert.get('labels', {}))}")
+                
+                logger.info("=== END ALERT ===")
+                
+                # Send response
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                response = {'status': 'success', 'message': 'Alert received'}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+                
+            except Exception as e:
+                logger.error(f"Error processing webhook: {e}")
+                self.send_response(500)
+                self.end_headers()
+
+        def do_GET(self):
+            # Health check endpoint
+            if self.path == '/health':
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                response = {'status': 'healthy', 'service': 'webhook-logger'}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, format, *args):
+            # Suppress default HTTP server logs
+            pass
+
+    if __name__ == '__main__':
+        port = int(os.environ.get('PORT', 8080))
+        server = HTTPServer(('0.0.0.0', port), WebhookHandler)
+        logger.info(f"Webhook logger started on port {port}")
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            logger.info("Webhook logger stopped")
+            server.shutdown()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook-logger
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webhook-logger
+  template:
+    metadata:
+      labels:
+        app: webhook-logger
+    spec:
+      containers:
+      - name: webhook-logger
+        image: python:3.11-slim
+        command: ["python3", "/app/webhook-logger.py"]
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        volumeMounts:
+        - name: script
+          mountPath: /app
+        - name: logs
+          mountPath: /var/log
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: script
+        configMap:
+          name: webhook-logger-script
+          defaultMode: 0755
+      - name: logs
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-logger
+  namespace: monitoring
+spec:
+  selector:
+    app: webhook-logger
+  ports:
+  - name: webhook
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP

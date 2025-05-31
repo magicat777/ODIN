@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-logo
+  namespace: monitoring
+  labels:
+    grafana_logo: odin
+data:
+  logo.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="720" viewBox="0 0 1440 720">
+      <defs>
+        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#00ff88;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#0099ff;stop-opacity:1" />
+        </linearGradient>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+        <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+          <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#333" stroke-width="0.5" opacity="0.2"/>
+        </pattern>
+      </defs>
+      
+      <!-- Background grid effect -->
+      <rect width="1440" height="720" fill="url(#grid)" opacity="0.3"/>
+      
+      <!-- ODIN text with gradient - 4x original size -->
+      <text x="720" y="300" font-family="Arial Black, sans-serif" font-size="240" font-weight="900" 
+            text-anchor="middle" fill="url(#grad1)" filter="url(#glow)" letter-spacing="-5">ODIN</text>
+      
+      <!-- Subtitle - 4x original size -->
+      <text x="720" y="480" font-family="Arial, sans-serif" font-size="96" font-weight="300"
+            text-anchor="middle" fill="#999">Omnipresent Diagnostics</text>
+      <text x="720" y="600" font-family="Arial, sans-serif" font-size="96" font-weight="300"
+            text-anchor="middle" fill="#999">Intelligence Network</text>
+      
+      <!-- Decorative elements - 4x original size -->
+      <circle cx="180" cy="180" r="36" fill="#00ff88" opacity="0.8">
+        <animate attributeName="r" values="36;40;36" dur="3s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="1260" cy="180" r="36" fill="#0099ff" opacity="0.8">
+        <animate attributeName="r" values="36;40;36" dur="3s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="180" cy="540" r="24" fill="#00ff88" opacity="0.6">
+        <animate attributeName="opacity" values="0.6;0.8;0.6" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="1260" cy="540" r="24" fill="#0099ff" opacity="0.6">
+        <animate attributeName="opacity" values="0.6;0.8;0.6" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      
+      <!-- Connection lines - 4x original size -->
+      <line x1="216" y1="180" x2="1224" y2="180" stroke="#333" stroke-width="12" opacity="0.5"/>
+      <line x1="204" y1="540" x2="1236" y2="540" stroke="#333" stroke-width="12" opacity="0.5"/>
+      
+      <!-- Network nodes -->
+      <circle cx="720" cy="180" r="12" fill="#00ccff" opacity="0.8"/>
+      <circle cx="720" cy="540" r="12" fill="#00ccff" opacity="0.8"/>
+      <circle cx="480" cy="360" r="8" fill="#00ff88" opacity="0.6"/>
+      <circle cx="960" cy="360" r="8" fill="#0099ff" opacity="0.6"/>
+      
+      <!-- Connection web -->
+      <line x1="480" y1="360" x2="720" y2="180" stroke="#00ccff" stroke-width="2" opacity="0.4"/>
+      <line x1="960" y1="360" x2="720" y2="180" stroke="#00ccff" stroke-width="2" opacity="0.4"/>
+      <line x1="480" y1="360" x2="720" y2="540" stroke="#00ccff" stroke-width="2" opacity="0.4"/>
+      <line x1="960" y1="360" x2="720" y2="540" stroke="#00ccff" stroke-width="2" opacity="0.4"/>
+    </svg>

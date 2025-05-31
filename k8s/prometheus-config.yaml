@@ -1,0 +1,320 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    # AlertManager configuration
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ['alertmanager:9093']
+    
+    rule_files:
+      - "/etc/prometheus/rules/gpu/*.yaml"
+      - "/etc/prometheus/rules/power-exporter/*.yaml"
+      - "/etc/prometheus/rules/claude-code/*.yaml"
+      - "/etc/prometheus/rules/k3s/*.yaml"
+      - "/etc/prometheus/rules/odin-stack/*.yaml"
+      - "/etc/prometheus/rules/anomaly/*.yaml"
+    
+    scrape_configs:
+    - job_name: 'prometheus'
+      static_configs:
+      - targets: ['localhost:9090']
+    
+    - job_name: 'kubernetes-service-discovery'
+      kubernetes_sd_configs:
+      - role: service
+        namespaces:
+          names: ['monitoring']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_service_annotation_prometheus_io_port]
+        action: replace
+        target_label: __address__
+        regex: (.+);(.+);(.+)
+        replacement: $2.$1.svc.cluster.local:$3
+    
+    - job_name: 'node-exporter'
+      static_configs:
+      - targets: ['192.168.1.154:9100']
+    
+    - job_name: 'cadvisor'
+      static_configs:
+      - targets: ['cadvisor:8080']
+    
+    - job_name: 'alertmanager'
+      static_configs:
+      - targets: ['alertmanager:9093']
+    
+    - job_name: 'grafana'
+      static_configs:
+      - targets: ['grafana:3000']
+    
+    - job_name: 'kube-state-metrics'
+      static_configs:
+      - targets: ['kube-state-metrics:8080']
+    
+    - job_name: 'nvidia-dcgm'
+      static_configs:
+      - targets: ['nvidia-dcgm-exporter:9400']
+    
+    - job_name: 'process-exporter'
+      static_configs:
+      - targets: ['process-exporter:9256']
+    
+    - job_name: 'razer-exporter'
+      static_configs:
+      - targets: ['razer-exporter:9401']
+    
+    - job_name: 'power-exporter'
+      static_configs:
+      - targets: ['192.168.1.154:9836']
+    
+    - job_name: 'claude-code-exporter'
+      static_configs:
+      - targets: ['claude-code-exporter:9403']
+    
+    - job_name: 'claude-token-collector'
+      static_configs:
+      - targets: ['claude-token-collector:9404']
+    
+    - job_name: 'network-exporter'
+      static_configs:
+      - targets: ['network-exporter:9403']
+    
+    - job_name: 'anomaly-detector'
+      static_configs:
+      - targets: ['anomaly-detector-v2:9405']
+    
+    - job_name: 'anomaly-detector-v3'
+      static_configs:
+      - targets: ['anomaly-detector-v3:9405']
+    
+    - job_name: 'loki'
+      static_configs:
+      - targets: ['loki:3100']
+    
+    - job_name: 'promtail'
+      static_configs:
+      - targets: ['promtail:9080']
+  
+  alert_rules.yml: |
+    groups:
+    - name: node_alerts
+      rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes"
+      
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes"
+      
+      - alert: DiskSpaceLow
+        expr: 100 - ((node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes) > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space is critically low"
+          description: "Disk usage is above 90% on {{ $labels.mountpoint }}"
+    
+    - name: container_alerts
+      rules:
+      - alert: PodRestarting
+        expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod is restarting frequently"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting"
+      
+      - alert: PodNotReady
+        expr: kube_pod_status_ready{condition="false"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod not ready"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for more than 10 minutes"
+      
+      - alert: KubernetesMemoryPressure
+        expr: kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kubernetes memory pressure"
+          description: "Node {{ $labels.node }} has memory pressure"
+      
+      - alert: KubernetesDiskPressure
+        expr: kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kubernetes disk pressure"
+          description: "Node {{ $labels.node }} has disk pressure"
+    
+    - name: gpu_alerts
+      rules:
+      - alert: GPUHighTemperature
+        expr: DCGM_FI_DEV_GPU_TEMP > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU temperature high"
+          description: "GPU {{ $labels.gpu }} temperature is {{ $value }}°C"
+      
+      - alert: GPUMemoryFull
+        expr: (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)) * 100 > 95
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU memory almost full"
+          description: "GPU {{ $labels.gpu }} memory usage is {{ $value }}%"
+      
+      - alert: GPUPowerHigh
+        expr: DCGM_FI_DEV_POWER_USAGE > 350
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU power consumption high"
+          description: "GPU {{ $labels.gpu }} power usage is {{ $value }}W"
+      
+      - alert: GPUUtilizationLow
+        expr: DCGM_FI_DEV_GPU_UTIL < 5
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "GPU utilization low"
+          description: "GPU {{ $labels.gpu }} utilization has been below 5% for 30 minutes"
+    
+    - name: process_alerts
+      rules:
+      - alert: ProcessHighCPU
+        expr: topk(5, sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Process using high CPU"
+          description: "Process {{ $labels.groupname }} is using {{ $value }}% CPU for 10 minutes"
+      
+      - alert: ProcessHighMemory
+        expr: topk(5, sum by (groupname) (namedprocess_namegroup_memory_bytes) / 1024 / 1024 / 1024) > 8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Process using high memory"
+          description: "Process {{ $labels.groupname }} is using {{ $value }}GB memory"
+      
+      - alert: ZombieProcesses
+        expr: sum(namedprocess_namegroup_states{state="Zombie"}) > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Multiple zombie processes detected"
+          description: "{{ $value }} zombie processes detected on the system"
+      
+      - alert: TooManyProcesses
+        expr: sum(namedprocess_namegroup_num_procs) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many processes running"
+          description: "{{ $value }} processes are running on the system"
+      
+      - alert: ProcessRestartingFrequently
+        expr: changes(namedprocess_namegroup_oldest_start_time_seconds[1h]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Process restarting frequently"
+          description: "Process {{ $labels.groupname }} has restarted {{ $value }} times in the last hour"
+    
+    - name: power_alerts
+      rules:
+      - alert: HighPowerConsumption
+        expr: sum(node_cpu_package_power_watts) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU power consumption"
+          description: "CPU package power consumption is {{ $value }}W"
+      
+      - alert: BatteryLow
+        expr: node_power_supply_capacity < 20
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Battery level low"
+          description: "Battery level is {{ $value }}%"
+      
+      - alert: BatteryHealthDegraded
+        expr: node_battery_health_percent < 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Battery health degraded"
+          description: "Battery health is {{ $value }}% of design capacity"
+      
+      - alert: ThermalThrottling
+        expr: rate(node_cpu_throttles_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CPU thermal throttling detected"
+          description: "CPU is being thermally throttled"
+    
+    - name: monitoring_alerts
+      rules:
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus target down"
+          description: "Target {{ $labels.job }} on {{ $labels.instance }} is down"
+      
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful != 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus configuration reload failed"
+          description: "Prometheus configuration reload has failed"

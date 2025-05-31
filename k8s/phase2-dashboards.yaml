@@ -1,0 +1,436 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phase2-dashboards
+  namespace: monitoring
+data:
+  container-metrics.json: |
+    {
+      "id": null,
+      "title": "Container Metrics",
+      "tags": ["containers", "kubernetes"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Monitoring Pods Status",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "count(kube_pod_info{namespace=\"monitoring\"})",
+              "legendFormat": "Total Pods",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Running Pods",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_phase{namespace=\"monitoring\", phase=\"Running\"})",
+              "legendFormat": "Running",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "Pod Restart Count",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"monitoring\"})",
+              "legendFormat": "Total Restarts",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 10}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0}
+        },
+        {
+          "id": 4,
+          "title": "Container States",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "count(kube_pod_container_status_ready{namespace=\"monitoring\"} == 1)",
+              "legendFormat": "Ready",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0}
+        },
+        {
+          "id": 5,
+          "title": "Pod Information",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "kube_pod_info{namespace=\"monitoring\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true,
+                  "uid": true
+                },
+                "indexByName": {},
+                "renameByName": {}
+              }
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}
+        },
+        {
+          "id": 6,
+          "title": "Pod Status Over Time",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "kube_pod_status_phase{namespace=\"monitoring\"}",
+              "legendFormat": "{{ pod }} - {{ phase }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}
+        }
+      ]
+    }
+
+  gpu-monitoring.json: |
+    {
+      "id": null,
+      "title": "GPU Monitoring",
+      "tags": ["gpu", "nvidia"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "GPU Device Plugin Status",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "up{job=\"kubernetes-service-discovery\", instance=~\".*nvidia.*\"}",
+              "legendFormat": "Device Plugin",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [
+                {"type": "value", "value": "0", "text": "DOWN"},
+                {"type": "value", "value": "1", "text": "UP"}
+              ],
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "GPU Temperature",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_temperature_celsius",
+              "legendFormat": "GPU {{gpu}} Temperature",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "red", "value": 85}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "GPU Utilization",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_utilization_percent",
+              "legendFormat": "GPU {{gpu}} Utilization",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 18, "y": 0}
+        },
+        {
+          "id": 4,
+          "title": "GPU Memory Usage",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_memory_used_mb",
+              "legendFormat": "GPU {{gpu}} Memory Used",
+              "refId": "A"
+            },
+            {
+              "expr": "nvidia_gpu_memory_total_mb - nvidia_gpu_memory_used_mb",
+              "legendFormat": "GPU {{gpu}} Memory Free",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decmbytes"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+        },
+        {
+          "id": 5,
+          "title": "GPU Power Usage",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "node_gpu_power_watts",
+              "legendFormat": "GPU {{gpu}} Power",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+        },
+        {
+          "id": 6,
+          "title": "GPU Status Information",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "kube_node_status_capacity{resource=\"nvidia_com_gpu\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "displayMode": "table"
+              }
+            }
+          },
+          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 16}
+        }
+      ]
+    }
+
+  monitoring-overview.json: |
+    {
+      "id": null,
+      "title": "Monitoring Stack Overview",
+      "tags": ["monitoring", "odin"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Monitoring Stack Status",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "up{job=~\"prometheus|node-exporter|alertmanager\"}",
+              "legendFormat": "{{ job }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "value", "value": "0", "text": "DOWN"},
+                {"type": "value", "value": "1", "text": "UP"}
+              ],
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": 0},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Prometheus Target Health",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "up",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+        },
+        {
+          "id": 3,
+          "title": "Alerts Overview",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "ALERTS",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+        }
+      ]
+    }
+
+  logs-dashboard.json: |
+    {
+      "id": null,
+      "title": "Logs Dashboard",
+      "tags": ["logs", "loki"],
+      "style": "dark", 
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Recent Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{namespace=\"monitoring\"}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 16, "w": 24, "x": 0, "y": 0}
+        }
+      ]
+    }

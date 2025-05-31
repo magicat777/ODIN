@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-custom-css-override
+  namespace: monitoring
+data:
+  override.css: |
+    /* Force larger logo on login page */
+    .css-1q52zsp {
+      width: 720px !important;
+      height: 360px !important;
+      max-width: none !important;
+      max-height: none !important;
+    }
+    
+    .css-14u0xp {
+      width: 100% !important;
+      max-width: 900px !important;
+    }
+    
+    /* Target the login logo specifically */
+    [class*="login-branding"] img,
+    [class*="Login__logo"] img,
+    .login img[src*="grafana_icon"],
+    .login img[src*="grafana_typelogo"] {
+      width: 720px !important;
+      height: 360px !important;
+      max-width: 720px !important;
+      max-height: 360px !important;
+      object-fit: contain !important;
+    }
+    
+    /* Ensure the container can hold the larger logo */
+    [class*="login-branding"],
+    [class*="Login__logo"] {
+      width: 100% !important;
+      max-width: 800px !important;
+      height: auto !important;
+      margin: 0 auto 40px auto !important;
+    }
+    
+    /* Adjust the login box spacing */
+    .login-form {
+      margin-top: 20px !important;
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: grafana-css-injector
+  namespace: monitoring
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: css-injector
+        image: alpine:latest
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          # Install kubectl
+          apk add --no-cache curl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+          
+          # Get the Grafana pod
+          POD=$(kubectl get pods -n monitoring -l app=grafana -o jsonpath='{.items[0].metadata.name}')
+          echo "Found Grafana pod: $POD"
+          
+          # Copy the CSS into the pod
+          kubectl exec -n monitoring $POD -- sh -c "
+            # Find all CSS files and append our custom CSS
+            find /usr/share/grafana/public -name '*.css' -type f | while read css; do
+              echo '/* ODIN Custom Logo CSS */' >> \$css
+              echo '.login img[src*=\"grafana_icon\"], .login img[src*=\"grafana_typelogo\"] { width: 720px !important; height: 360px !important; max-width: 720px !important; max-height: 360px !important; }' >> \$css
+              echo '[class*=\"login-branding\"] { width: 100% !important; max-width: 800px !important; }' >> \$css
+            done
+          "
+          
+          echo "CSS injection complete"
+      serviceAccountName: grafana-css-injector
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-css-injector
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grafana-css-injector
+  namespace: monitoring
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grafana-css-injector
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: grafana-css-injector
+subjects:
+- kind: ServiceAccount
+  name: grafana-css-injector
+  namespace: monitoring

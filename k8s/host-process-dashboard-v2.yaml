@@ -1,0 +1,467 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: host-process-dashboard-v2
+  namespace: monitoring
+data:
+  host-process-monitoring.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "host-process-monitoring",
+        "title": "Host Process Monitoring - Ubuntu 22.04",
+        "tags": ["processes", "system", "razerblade", "host"],
+        "timezone": "browser",
+        "schemaVersion": 38,
+        "version": 3,
+        "refresh": "30s",
+        "panels": [
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "id": 1,
+            "type": "timeseries",
+            "title": "Top CPU Consuming Processes",
+            "targets": [
+              {
+                "expr": "topk(5, sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100)",
+                "legendFormat": "{{ groupname }}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 1,
+                "min": 0,
+                "max": 100
+              }
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "id": 2,
+            "type": "table",
+            "title": "Top Memory Consuming Processes (Resident Memory)",
+            "targets": [
+              {
+                "expr": "topk(10, sum by (groupname) (namedprocess_namegroup_memory_bytes{memtype=\"resident\"}))",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "bytes",
+                "decimals": 0,
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "color-background-solid"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "groupname"
+                  },
+                  "properties": [
+                    {
+                      "id": "displayName",
+                      "value": "Process Name"
+                    },
+                    {
+                      "id": "custom.width",
+                      "value": 200
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Value"
+                  },
+                  "properties": [
+                    {
+                      "id": "displayName",
+                      "value": "Memory"
+                    },
+                    {
+                      "id": "custom.displayMode",
+                      "value": "gradient-gauge"
+                    }
+                  ]
+                }
+              ]
+            },
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+            "id": 3,
+            "type": "graph",
+            "title": "Process CPU Usage Over Time",
+            "targets": [
+              {
+                "expr": "topk(5, sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100)",
+                "legendFormat": "{{ groupname }}"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "percent",
+                "label": "CPU %",
+                "min": 0
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+            "id": 4,
+            "type": "timeseries",
+            "title": "Process Memory Usage Over Time (Resident)",
+            "targets": [
+              {
+                "expr": "topk(5, sum by (groupname) (namedprocess_namegroup_memory_bytes{memtype=\"resident\"}))",
+                "legendFormat": "{{ groupname }}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "bytes",
+                "decimals": 0,
+                "min": 0,
+                "custom": {
+                  "drawStyle": "line",
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                }
+              },
+              "overrides": []
+            },
+            "options": {
+              "legend": {
+                "displayMode": "table",
+                "placement": "right",
+                "calcs": ["mean", "max"],
+                "showLegend": true
+              }
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+            "id": 5,
+            "type": "stat",
+            "title": "Total Processes",
+            "targets": [
+              {
+                "expr": "sum(namedprocess_namegroup_num_procs)"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0
+              }
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+            "id": 6,
+            "type": "stat",
+            "title": "Total Threads",
+            "targets": [
+              {
+                "expr": "sum(namedprocess_namegroup_num_threads)"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0
+              }
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+            "id": 7,
+            "type": "piechart",
+            "title": "CPU Usage by Process",
+            "targets": [
+              {
+                "expr": "topk(10, sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100)",
+                "legendFormat": "{{ groupname }}"
+              }
+            ],
+            "options": {
+              "reduceOptions": {
+                "values": false,
+                "calcs": ["lastNotNull"]
+              },
+              "pieType": "donut",
+              "displayLabels": ["name", "value"],
+              "legendDisplayMode": "table",
+              "legendPlacement": "right"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 1
+              }
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+            "id": 8,
+            "type": "piechart",
+            "title": "Memory Usage by Process (Resident)",
+            "targets": [
+              {
+                "expr": "topk(10, sum by (groupname) (namedprocess_namegroup_memory_bytes{memtype=\"resident\"}))",
+                "legendFormat": "{{ groupname }}"
+              }
+            ],
+            "options": {
+              "reduceOptions": {
+                "values": false,
+                "calcs": ["lastNotNull"]
+              },
+              "pieType": "donut",
+              "displayLabels": ["name", "value"],
+              "legendDisplayMode": "table",
+              "legendPlacement": "right"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "bytes",
+                "decimals": 1
+              }
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32},
+            "id": 9,
+            "type": "table",
+            "title": "Process Details",
+            "targets": [
+              {
+                "expr": "sum by (groupname) (namedprocess_namegroup_num_procs)",
+                "format": "table",
+                "instant": true
+              },
+              {
+                "expr": "sum by (groupname) (namedprocess_namegroup_num_threads)",
+                "format": "table",
+                "instant": true
+              },
+              {
+                "expr": "sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100",
+                "format": "table",
+                "instant": true
+              },
+              {
+                "expr": "sum by (groupname) (namedprocess_namegroup_memory_bytes{memtype=\"resident\"})",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "transformations": [
+              {
+                "id": "merge"
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true,
+                    "Time 1": true,
+                    "Time 2": true,
+                    "Time 3": true,
+                    "Time 4": true
+                  },
+                  "renameByName": {
+                    "groupname": "Process",
+                    "Value #A": "Count",
+                    "Value #B": "Threads",
+                    "Value #C": "CPU %",
+                    "Value #D": "Memory"
+                  }
+                }
+              },
+              {
+                "id": "sortBy",
+                "options": {
+                  "sort": [
+                    {
+                      "field": "Memory",
+                      "desc": true
+                    }
+                  ]
+                }
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "auto"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "CPU %"
+                  },
+                  "properties": [
+                    {
+                      "id": "unit",
+                      "value": "percent"
+                    },
+                    {
+                      "id": "decimals",
+                      "value": 1
+                    },
+                    {
+                      "id": "custom.displayMode",
+                      "value": "gradient-gauge"
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Memory"
+                  },
+                  "properties": [
+                    {
+                      "id": "unit",
+                      "value": "bytes"
+                    },
+                    {
+                      "id": "custom.displayMode",
+                      "value": "gradient-gauge"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40},
+            "id": 10,
+            "type": "graph",
+            "title": "Memory Types Comparison",
+            "targets": [
+              {
+                "expr": "topk(3, sum by (groupname) (namedprocess_namegroup_memory_bytes{memtype=\"resident\"}))",
+                "legendFormat": "{{ groupname }} - Resident"
+              },
+              {
+                "expr": "topk(3, sum by (groupname) (namedprocess_namegroup_memory_bytes{memtype=\"virtual\"}))",
+                "legendFormat": "{{ groupname }} - Virtual"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "bytes",
+                "label": "Memory",
+                "logBase": 1
+              },
+              {
+                "format": "short"
+              }
+            ],
+            "seriesOverrides": [
+              {
+                "alias": "/-Virtual/",
+                "dashes": true,
+                "lines": true
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40},
+            "id": 11,
+            "type": "graph",
+            "title": "Process States",
+            "targets": [
+              {
+                "expr": "sum(namedprocess_namegroup_states) by (state)",
+                "legendFormat": "{{ state }}"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Count"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 48},
+            "id": 12,
+            "type": "timeseries",
+            "title": "CPU Usage Distribution (Stacked)",
+            "targets": [
+              {
+                "expr": "topk(10, sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100)",
+                "legendFormat": "{{ groupname }}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 1,
+                "min": 0,
+                "custom": {
+                  "drawStyle": "line",
+                  "lineWidth": 1,
+                  "fillOpacity": 50,
+                  "stacking": {
+                    "mode": "normal",
+                    "group": "A"
+                  },
+                  "showPoints": "never"
+                }
+              }
+            },
+            "options": {
+              "legend": {
+                "displayMode": "table",
+                "placement": "right",
+                "calcs": ["mean", "max"],
+                "showLegend": true
+              }
+            }
+          }
+        ]
+      }
+    }

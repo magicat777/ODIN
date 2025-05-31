@@ -1,0 +1,181 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simple-logs-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  simple-logs-dashboard.json: |
+    {
+      "id": null,
+      "uid": "simple-logs",
+      "title": "ODIN Simple Logs Dashboard",
+      "tags": ["odin", "logs", "monitoring"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "All Monitoring Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{namespace=\"monitoring\"}",
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              }
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Prometheus Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{app=\"prometheus\"}",
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              }
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12}
+        },
+        {
+          "id": 3,
+          "title": "Grafana Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{app=\"grafana\"}",
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              }
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12}
+        },
+        {
+          "id": 4,
+          "title": "Loki Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{app=\"loki\"}",
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              }
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12}
+        },
+        {
+          "id": 5,
+          "title": "AlertManager Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{app=\"alertmanager\"}",
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              }
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20}
+        },
+        {
+          "id": 6,
+          "title": "System Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{job=\"system\"}",
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              }
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20}
+        },
+        {
+          "id": 7,
+          "title": "Error Logs",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{namespace=\"monitoring\"} |~ \"(?i)(error|fail|exception|fatal|warn)\"",
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              }
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 28}
+        }
+      ]
+    }

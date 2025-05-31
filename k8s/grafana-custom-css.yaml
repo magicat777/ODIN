@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-custom-css
+  namespace: monitoring
+data:
+  custom.css: |
+    /* Custom CSS for ODIN branding */
+    
+    /* Double the size of the main logo */
+    .grafana-app .sidemenu__logo img {
+      height: 90px !important;
+      width: 180px !important;
+      max-height: 90px !important;
+    }
+    
+    /* Adjust login page logo */
+    .login-branding img {
+      height: 180px !important;
+      width: 360px !important;
+      max-width: 360px !important;
+    }
+    
+    /* Ensure logo container has enough space */
+    .sidemenu__logo {
+      height: 100px !important;
+      padding: 10px !important;
+    }
+    
+    /* Home page logo adjustments */
+    .page-dashboard .navbar-brand-btn img {
+      height: 60px !important;
+      width: 120px !important;
+    }
+    
+    /* Loading screen logo */
+    .preloader__logo {
+      width: 360px !important;
+      height: 180px !important;
+    }

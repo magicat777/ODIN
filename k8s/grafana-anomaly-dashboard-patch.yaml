@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider-ml
+  namespace: monitoring
+data:
+  ml-dashboards.yaml: |
+    apiVersion: 1
+    providers:
+    - name: 'ml-anomaly'
+      orgId: 1
+      folder: 'ML & AI'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards-ml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  template:
+    spec:
+      containers:
+      - name: grafana
+        volumeMounts:
+        - name: anomaly-dashboard
+          mountPath: /var/lib/grafana/dashboards-ml
+      volumes:
+      - name: anomaly-dashboard
+        configMap:
+          name: anomaly-detection-dashboard

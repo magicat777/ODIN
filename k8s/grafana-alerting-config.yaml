@@ -1,0 +1,184 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-config
+  namespace: monitoring
+data:
+  provisioning-alerting.yaml: |
+    apiVersion: 1
+    
+    # Contact points configuration
+    contactPoints:
+      - orgId: 1
+        name: default-contact
+        receivers:
+          - uid: default-webhook
+            type: webhook
+            settings:
+              url: http://webhook-logger:8080/grafana
+              httpMethod: POST
+            disableResolveMessage: false
+            
+      - orgId: 1
+        name: critical-contact
+        receivers:
+          - uid: critical-webhook
+            type: webhook
+            settings:
+              url: http://webhook-logger:8080/grafana-critical
+              httpMethod: POST
+            disableResolveMessage: false
+            
+      - orgId: 1
+        name: ops-team
+        receivers:
+          - uid: ops-webhook
+            type: webhook
+            settings:
+              url: http://webhook-logger:8080/ops
+              httpMethod: POST
+            disableResolveMessage: false
+            
+    # Notification policies
+    policies:
+      - orgId: 1
+        receiver: default-contact
+        group_by: ['grafana_folder', 'alertname']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 12h
+        routes:
+          # Critical alerts get immediate notification
+          - receiver: critical-contact
+            match:
+              severity: critical
+            group_wait: 0s
+            group_interval: 1m
+            repeat_interval: 1h
+            
+          # K3s and monitoring stack alerts
+          - receiver: ops-team
+            match_re:
+              component: 'k3s|monitoring-stack'
+            group_wait: 1m
+            group_interval: 5m
+            repeat_interval: 4h
+            
+    # Mute timings (maintenance windows)
+    muteTimes:
+      - orgId: 1
+        name: weekends
+        intervals:
+          - times:
+              - start: '00:00'
+                end: '24:00'
+            weekdays: ['saturday', 'sunday']
+            
+      - orgId: 1
+        name: night-hours
+        intervals:
+          - times:
+              - start: '22:00'
+                end: '06:00'
+            weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
+            
+    # Alert rule templates
+    templates:
+      - orgId: 1
+        name: odin-templates
+        template: |
+          {{ define "odin.message" }}
+          {{ if gt (len .Alerts.Firing) 0 }}
+          🔥 FIRING: {{ len .Alerts.Firing }} alert(s)
+          {{ range .Alerts.Firing }}
+          • {{ .Labels.alertname }}: {{ .Annotations.summary }}
+          {{ end }}
+          {{ end }}
+          {{ if gt (len .Alerts.Resolved) 0 }}
+          ✅ RESOLVED: {{ len .Alerts.Resolved }} alert(s)
+          {{ range .Alerts.Resolved }}
+          • {{ .Labels.alertname }}
+          {{ end }}
+          {{ end }}
+          {{ end }}
+          
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alert-rules
+  namespace: monitoring
+data:
+  odin-grafana-rules.yaml: |
+    apiVersion: 1
+    groups:
+      - name: ODIN Platform Alerts
+        orgId: 1
+        folder: ODIN Alerts
+        interval: 1m
+        rules:
+          # Dashboard health
+          - uid: dashboard-health-1
+            title: Dashboard Loading Slow
+            condition: A
+            data:
+              - refId: A
+                queryType: ''
+                model:
+                  datasourceUid: prometheus
+                  expr: histogram_quantile(0.95, rate(grafana_http_request_duration_seconds_bucket{handler="/api/dashboards/uid/:uid"}[5m])) > 2
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+            noDataState: NoData
+            execErrState: Alerting
+            for: 5m
+            annotations:
+              summary: Grafana dashboard loading is slow
+              description: '95th percentile dashboard load time is {{ $value }}s'
+            labels:
+              severity: warning
+              component: grafana
+              
+          # Data source health
+          - uid: datasource-health-1
+            title: Data Source Query Failures
+            condition: A
+            data:
+              - refId: A
+                queryType: ''
+                model:
+                  datasourceUid: prometheus
+                  expr: rate(grafana_datasource_request_errors_total[5m]) > 0.1
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+            noDataState: NoData
+            execErrState: Alerting
+            for: 5m
+            annotations:
+              summary: Data source queries are failing
+              description: 'Data source {{ $labels.datasource }} is experiencing {{ $value }} errors per second'
+            labels:
+              severity: warning
+              component: grafana
+              
+          # Alert notification failures
+          - uid: notification-health-1
+            title: Alert Notification Failures
+            condition: A
+            data:
+              - refId: A
+                queryType: ''
+                model:
+                  datasourceUid: prometheus
+                  expr: increase(grafana_alerting_notification_failed_total[5m]) > 5
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+            noDataState: NoData
+            execErrState: Alerting
+            for: 5m
+            annotations:
+              summary: Alert notifications are failing
+              description: '{{ $value }} alert notifications failed in the last 5 minutes'
+            labels:
+              severity: critical
+              component: grafana

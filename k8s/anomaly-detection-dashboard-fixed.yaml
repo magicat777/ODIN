@@ -1,0 +1,524 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: anomaly-detection-dashboard-fixed
+  namespace: monitoring
+data:
+  anomaly-detection-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "anomaly-detection",
+        "title": "ML Anomaly Detection",
+        "tags": ["odin", "anomaly", "ml", "ai"],
+        "timezone": "browser",
+        "schemaVersion": 38,
+        "version": 1,
+        "refresh": "30s",
+        "time": {
+          "from": "now-3h",
+          "to": "now"
+        },
+        "fiscalYearStartMonth": 0,
+        "graphTooltip": 0,
+        "links": [],
+        "liveNow": false,
+        "panels": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+            "id": 1,
+            "type": "text",
+            "title": "",
+            "options": {
+              "mode": "markdown",
+              "code": {
+                "language": "plaintext",
+                "showLineNumbers": false,
+                "showMiniMap": false
+              },
+              "content": "# ML-Based Anomaly Detection\n\nThis dashboard shows anomaly scores for key metrics using machine learning algorithms:\n- **Isolation Forest**: For complex patterns (GPU, network)\n- **Statistical Methods**: For simpler metrics (CPU, memory)\n\n**Scoring**: 0 = Normal, 100 = Highly Anomalous"
+            }
+          },
+          {
+            "datasource": {
+              "type": "prometheus", 
+              "uid": "prometheus"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "tooltip": false,
+                    "viz": false,
+                    "legend": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "line"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow", 
+                      "value": 60
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": []
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+            "id": 2,
+            "type": "timeseries",
+            "title": "GPU Temperature Anomaly Score",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus"
+                },
+                "expr": "anomaly_score{metric_name=\"nvidia_gpu_temperature_celsius\"}",
+                "legendFormat": "Anomaly Score",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              },
+              "legend": {
+                "displayMode": "list",
+                "placement": "bottom",
+                "calcs": []
+              }
+            }
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "tooltip": false,
+                    "viz": false,
+                    "legend": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "line"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 60
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": []
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+            "id": 3,
+            "type": "timeseries",
+            "title": "GPU Power Draw Anomaly Score",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus"
+                },
+                "expr": "anomaly_score{metric_name=\"node_gpu_power_watts\"}",
+                "legendFormat": "Anomaly Score",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              },
+              "legend": {
+                "displayMode": "list",
+                "placement": "bottom",
+                "calcs": []
+              }
+            }
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "tooltip": false,
+                    "viz": false,
+                    "legend": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "line"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 60
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": []
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+            "id": 4,
+            "type": "timeseries",
+            "title": "Memory Availability Anomaly Score",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus"
+                },
+                "expr": "anomaly_score{metric_name=\"node_memory_MemAvailable_bytes\"}",
+                "legendFormat": "Anomaly Score",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              },
+              "legend": {
+                "displayMode": "list",
+                "placement": "bottom",
+                "calcs": []
+              }
+            }
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "tooltip": false,
+                    "viz": false,
+                    "legend": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "line"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 60
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": []
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+            "id": 5,
+            "type": "timeseries",
+            "title": "Network Traffic Anomaly Score",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus"
+                },
+                "expr": "anomaly_score{metric_name=\"network_receive_rate\"}",
+                "legendFormat": "Anomaly Score",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              },
+              "legend": {
+                "displayMode": "list",
+                "placement": "bottom",
+                "calcs": []
+              }
+            }
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "center",
+                  "displayMode": "color-background-solid",
+                  "inspect": false,
+                  "filterable": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 60
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Anomaly Score"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.displayMode",
+                      "value": "gradient-gauge"
+                    },
+                    {
+                      "id": "custom.width",
+                      "value": 200
+                    },
+                    {
+                      "id": "min",
+                      "value": 0
+                    },
+                    {
+                      "id": "max",
+                      "value": 100
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+            "id": 6,
+            "type": "table",
+            "title": "Current Anomaly Status",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus"
+                },
+                "expr": "anomaly_score",
+                "format": "table",
+                "instant": true,
+                "refId": "A"
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true,
+                    "__name__": true,
+                    "job": true,
+                    "instance": true
+                  },
+                  "renameByName": {
+                    "metric_name": "Metric",
+                    "algorithm": "Algorithm",
+                    "Value": "Anomaly Score"
+                  }
+                }
+              }
+            ],
+            "options": {
+              "showHeader": true,
+              "footer": {
+                "show": false,
+                "reducer": ["sum"],
+                "fields": ""
+              },
+              "frameIndex": 0
+            }
+          }
+        ],
+        "templating": {
+          "list": []
+        },
+        "annotations": {
+          "list": [
+            {
+              "builtIn": 1,
+              "datasource": {
+                "type": "grafana",
+                "uid": "-- Grafana --"
+              },
+              "enable": true,
+              "hide": true,
+              "iconColor": "rgba(0, 211, 255, 1)",
+              "name": "Annotations & Alerts",
+              "type": "dashboard"
+            }
+          ]
+        }
+      },
+      "folderUid": "",
+      "overwrite": true
+    }

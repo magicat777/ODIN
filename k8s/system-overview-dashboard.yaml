@@ -1,0 +1,436 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: system-overview-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  system-overview-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "system-overview",
+        "title": "ODIN System Overview",
+      "tags": ["odin", "overview", "system"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "System Status",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "up{job=\"prometheus\"}",
+              "legendFormat": "Prometheus",
+              "refId": "A"
+            },
+            {
+              "expr": "up{job=\"alertmanager\"}",
+              "legendFormat": "AlertManager",
+              "refId": "B"
+            },
+            {
+              "expr": "up{job=\"node-exporter\"}",
+              "legendFormat": "Node Exporter",
+              "refId": "C"
+            },
+            {
+              "expr": "up{job=\"kube-state-metrics\"}",
+              "legendFormat": "Kube State Metrics",
+              "refId": "D"
+            },
+            {
+              "expr": "up{job=\"power-exporter\"}",
+              "legendFormat": "Power Exporter",
+              "refId": "E"
+            },
+            {
+              "expr": "up{job=\"process-exporter\"}",
+              "legendFormat": "Process Exporter",
+              "refId": "F"
+            },
+            {
+              "expr": "up{job=\"claude-code-exporter\"}",
+              "legendFormat": "Claude Code Exporter",
+              "refId": "G"
+            },
+            {
+              "expr": "up{job=\"razer-exporter\"}",
+              "legendFormat": "Razer Exporter",
+              "refId": "H"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              },
+              "mappings": [
+                {"options": {"0": {"text": "DOWN", "color": "red"}}, "type": "value"},
+                {"options": {"1": {"text": "UP", "color": "green"}}, "type": "value"}
+              ],
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Cluster Resources",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))) * 100",
+              "legendFormat": "CPU Usage %",
+              "refId": "A"
+            },
+            {
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+              "legendFormat": "Memory Usage %",
+              "refId": "B"
+            },
+            {
+              "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})) * 100",
+              "legendFormat": "Disk Usage %",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "red", "value": 90}
+                ]
+              },
+              "unit": "percent",
+              "decimals": 1
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "GPU Status",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_temperature_celsius",
+              "legendFormat": "GPU Temp °C",
+              "refId": "A"
+            },
+            {
+              "expr": "nvidia_gpu_power_draw_watts",
+              "legendFormat": "Power Draw W",
+              "refId": "B"
+            },
+            {
+              "expr": "nvidia_gpu_utilization_percent",
+              "legendFormat": "GPU Usage %",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "red", "value": 85}
+                ]
+              },
+              "decimals": 0
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "GPU Temp °C"},
+                "properties": [{"id": "unit", "value": "celsius"}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Power Draw W"},
+                "properties": [{"id": "unit", "value": "watt"}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "GPU Usage %"},
+                "properties": [{"id": "unit", "value": "percent"}]
+              }
+            ]
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+        },
+        {
+          "id": 4,
+          "title": "Active Alerts",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "ALERTS{alertstate=\"firing\"}",
+              "legendFormat": "{{alertname}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 5}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 4}
+        },
+        {
+          "id": 5,
+          "title": "CPU Usage",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) by (instance)) * 100",
+              "legendFormat": "CPU Usage",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
+        },
+        {
+          "id": 6,
+          "title": "Memory Usage",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+              "legendFormat": "Memory Usage",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
+        },
+        {
+          "id": 7,
+          "title": "GPU Metrics",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "nvidia_gpu_temperature_celsius",
+              "legendFormat": "Temperature °C",
+              "refId": "A"
+            },
+            {
+              "expr": "nvidia_gpu_utilization_percent",
+              "legendFormat": "Utilization %",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Temperature °C"},
+                "properties": [{"id": "unit", "value": "celsius"}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Utilization %"},
+                "properties": [{"id": "unit", "value": "percent"}]
+              }
+            ]
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
+        },
+        {
+          "id": 8,
+          "title": "Pod Status by Namespace",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "count by (namespace, pod) (up{namespace=\"monitoring\"})",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "namespace": {
+                    "aggregations": ["count"],
+                    "operation": "groupby"
+                  },
+                  "Value": {
+                    "aggregations": ["count"],
+                    "operation": "aggregate"
+                  }
+                }
+              }
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+        },
+        {
+          "id": 9,
+          "title": "Top CPU Consuming Pods",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "topk(5, rate(container_cpu_usage_seconds_total{namespace=\"monitoring\"}[5m]) * 100)",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "displayMode": "color-background-solid"
+              },
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 50},
+                  {"color": "red", "value": 80}
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+        },
+        {
+          "id": 10,
+          "title": "Network I/O",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*|docker.*|flannel.*|cali.*|cbr.*\"}[5m])*8",
+              "legendFormat": "RX {{device}}",
+              "refId": "A"
+            },
+            {
+              "expr": "-rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|docker.*|flannel.*|cali.*|cbr.*\"}[5m])*8",
+              "legendFormat": "TX {{device}}",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "bps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+        },
+        {
+          "id": 11,
+          "title": "Disk I/O",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "rate(node_disk_read_bytes_total[5m])",
+              "legendFormat": "Read {{device}}",
+              "refId": "A"
+            },
+            {
+              "expr": "-rate(node_disk_written_bytes_total[5m])",
+              "legendFormat": "Write {{device}}",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "Bps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+        },
+        {
+          "id": 12,
+          "title": "Recent Logs Summary",
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{namespace=\"monitoring\"} |~ \"(?i)(error|fail|warn)\"",
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              }
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32}
+        }
+      ]
+      }
+    }

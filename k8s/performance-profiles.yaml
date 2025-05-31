@@ -1,0 +1,493 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: performance-profiles
+  namespace: monitoring
+data:
+  profiles.yaml: |
+    # Performance Baseline Profiles for Razer Blade 18
+    # These thresholds are based on typical workloads
+    
+    profiles:
+      idle:
+        name: "Idle/Light Usage"
+        description: "System at rest or light browsing"
+        thresholds:
+          cpu_usage_percent: 5
+          memory_usage_percent: 20
+          gpu_usage_percent: 5
+          power_consumption_watts: 25
+          temperature_celsius: 45
+          network_bandwidth_mbps: 10
+          disk_io_mbps: 5
+      
+      development:
+        name: "Software Development"
+        description: "IDE, compiling, debugging, containers"
+        thresholds:
+          cpu_usage_percent: 40
+          memory_usage_percent: 60
+          gpu_usage_percent: 10
+          power_consumption_watts: 65
+          temperature_celsius: 65
+          network_bandwidth_mbps: 50
+          disk_io_mbps: 100
+      
+      ai_inference:
+        name: "AI/ML Inference"
+        description: "Running Claude Code, Copilot, local LLMs"
+        thresholds:
+          cpu_usage_percent: 60
+          memory_usage_percent: 70
+          gpu_usage_percent: 80
+          power_consumption_watts: 150
+          temperature_celsius: 75
+          network_bandwidth_mbps: 20
+          disk_io_mbps: 50
+      
+      gaming:
+        name: "Gaming"
+        description: "High-performance gaming workload"
+        thresholds:
+          cpu_usage_percent: 70
+          memory_usage_percent: 65
+          gpu_usage_percent: 95
+          power_consumption_watts: 280
+          temperature_celsius: 85
+          network_bandwidth_mbps: 100
+          disk_io_mbps: 200
+      
+      video_editing:
+        name: "Video Editing/Rendering"
+        description: "4K video editing, encoding, effects"
+        thresholds:
+          cpu_usage_percent: 90
+          memory_usage_percent: 85
+          gpu_usage_percent: 90
+          power_consumption_watts: 250
+          temperature_celsius: 80
+          network_bandwidth_mbps: 30
+          disk_io_mbps: 500
+      
+      stress_test:
+        name: "Stress Test"
+        description: "Maximum system load for testing"
+        thresholds:
+          cpu_usage_percent: 100
+          memory_usage_percent: 95
+          gpu_usage_percent: 100
+          power_consumption_watts: 330
+          temperature_celsius: 95
+          network_bandwidth_mbps: 1000
+          disk_io_mbps: 1000
+    
+    alert_rules:
+      - name: "Performance Anomaly Detection"
+        rules:
+          - alert: "CPU Usage Exceeds Profile"
+            expr: |
+              (100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) 
+              > on() group_left() performance_profile_cpu_threshold
+            for: 5m
+            
+          - alert: "Memory Usage Exceeds Profile"
+            expr: |
+              ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100)
+              > on() group_left() performance_profile_memory_threshold
+            for: 5m
+            
+          - alert: "Temperature Exceeds Profile"
+            expr: |
+              max(node_hwmon_temp_celsius)
+              > on() group_left() performance_profile_temperature_threshold
+            for: 3m
+            
+          - alert: "Power Consumption Exceeds Profile"
+            expr: |
+              sum(node_cpu_package_power_watts) + sum(node_gpu_power_watts)
+              > on() group_left() performance_profile_power_threshold
+            for: 5m
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: performance-baseline-dashboard
+  namespace: monitoring
+data:
+  performance-baselines.json: |
+    {
+      "id": null,
+      "uid": "performance-baselines",
+      "title": "Performance Baseline Profiles",
+      "tags": ["performance", "baseline", "profiles"],
+      "timezone": "browser",
+      "schemaVersion": 30,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
+            "type": "text",
+            "title": "Active Profile Selection",
+            "options": {
+              "content": "## Current Workload Profile\nSelect the appropriate profile based on your current activity:\n- **Idle**: System at rest\n- **Development**: Coding, compiling\n- **AI/ML**: Running LLMs, inference\n- **Gaming**: High-performance gaming\n- **Video**: Editing/rendering\n- **Stress**: Maximum load testing",
+              "mode": "markdown"
+            }
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 2},
+            "type": "timeseries",
+            "title": "CPU Usage vs Baseline",
+            "targets": [
+              {
+                "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+                "legendFormat": "Current CPU %"
+              },
+              {
+                "expr": "5",
+                "legendFormat": "Idle Baseline"
+              },
+              {
+                "expr": "40",
+                "legendFormat": "Development Baseline"
+              },
+              {
+                "expr": "60",
+                "legendFormat": "AI/ML Baseline"
+              },
+              {
+                "expr": "90",
+                "legendFormat": "Video Editing Baseline"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 1,
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 60},
+                    {"color": "red", "value": 80}
+                  ]
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "Current CPU %"},
+                  "properties": [
+                    {"id": "custom.lineWidth", "value": 3},
+                    {"id": "custom.fillOpacity", "value": 20}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 2},
+            "type": "timeseries",
+            "title": "Memory Usage vs Baseline",
+            "targets": [
+              {
+                "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+                "legendFormat": "Current Memory %"
+              },
+              {
+                "expr": "20",
+                "legendFormat": "Idle Baseline"
+              },
+              {
+                "expr": "60",
+                "legendFormat": "Development Baseline"
+              },
+              {
+                "expr": "70",
+                "legendFormat": "AI/ML Baseline"
+              },
+              {
+                "expr": "85",
+                "legendFormat": "Video Editing Baseline"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 1,
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                }
+              }
+            }
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
+            "type": "timeseries",
+            "title": "Power Consumption vs Baseline",
+            "targets": [
+              {
+                "expr": "sum(node_cpu_package_power_watts) + sum(node_gpu_power_watts or vector(0))",
+                "legendFormat": "Current Power"
+              },
+              {
+                "expr": "25",
+                "legendFormat": "Idle Baseline"
+              },
+              {
+                "expr": "65",
+                "legendFormat": "Development Baseline"
+              },
+              {
+                "expr": "150",
+                "legendFormat": "AI/ML Baseline"
+              },
+              {
+                "expr": "280",
+                "legendFormat": "Gaming Baseline"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "watt",
+                "decimals": 0,
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                }
+              }
+            }
+          },
+          {
+            "id": 5,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
+            "type": "timeseries",
+            "title": "Temperature vs Baseline",
+            "targets": [
+              {
+                "expr": "max(node_hwmon_temp_celsius)",
+                "legendFormat": "Current Temperature"
+              },
+              {
+                "expr": "45",
+                "legendFormat": "Idle Baseline"
+              },
+              {
+                "expr": "65",
+                "legendFormat": "Development Baseline"
+              },
+              {
+                "expr": "75",
+                "legendFormat": "AI/ML Baseline"
+              },
+              {
+                "expr": "85",
+                "legendFormat": "Gaming Baseline"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "celsius",
+                "decimals": 0,
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 70},
+                    {"color": "red", "value": 85}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 6,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 18},
+            "type": "heatmap",
+            "title": "Performance Profile Heatmap",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(node_cpu_seconds_total[5m])) by (le))",
+                "format": "heatmap",
+                "legendFormat": "{{le}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "scaleDistribution": {"type": "linear"},
+                  "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+                }
+              }
+            },
+            "options": {
+              "calculate": false,
+              "yAxis": {
+                "axisPlacement": "left",
+                "reverse": false
+              },
+              "rowsFrame": {
+                "layout": "auto"
+              },
+              "color": {
+                "mode": "scheme",
+                "scheme": "Spectral",
+                "steps": 64
+              }
+            }
+          },
+          {
+            "id": 7,
+            "gridPos": {"h": 6, "w": 8, "x": 0, "y": 26},
+            "type": "gauge",
+            "title": "Performance Score",
+            "targets": [
+              {
+                "expr": "100 - ((((100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)) / 100) + ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))) + (max(node_hwmon_temp_celsius) / 100)) / 3 * 100)",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 40},
+                    {"color": "green", "value": 70}
+                  ]
+                }
+              }
+            },
+            "options": {
+              "orientation": "auto",
+              "showThresholdLabels": true,
+              "showThresholdMarkers": true
+            }
+          },
+          {
+            "id": 8,
+            "gridPos": {"h": 6, "w": 8, "x": 8, "y": 26},
+            "type": "stat",
+            "title": "Workload Classification",
+            "targets": [
+              {
+                "expr": "(100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100))",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 0,
+                "mappings": [
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": 0,
+                      "to": 10,
+                      "result": {"text": "Idle", "color": "green"}
+                    }
+                  },
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": 10,
+                      "to": 50,
+                      "result": {"text": "Development", "color": "blue"}
+                    }
+                  },
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": 50,
+                      "to": 70,
+                      "result": {"text": "AI/ML", "color": "purple"}
+                    }
+                  },
+                  {
+                    "type": "range",
+                    "options": {
+                      "from": 70,
+                      "to": 100,
+                      "result": {"text": "Heavy Load", "color": "red"}
+                    }
+                  }
+                ]
+              }
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "none",
+              "reduceOptions": {
+                "values": false,
+                "calcs": ["last"]
+              }
+            }
+          },
+          {
+            "id": 9,
+            "gridPos": {"h": 6, "w": 8, "x": 16, "y": 26},
+            "type": "stat",
+            "title": "Efficiency Rating",
+            "targets": [
+              {
+                "expr": "(sum(rate(node_cpu_seconds_total{mode!=\"idle\"}[5m])) / sum(node_cpu_package_power_watts or vector(50))) * 100",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 1,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 50},
+                    {"color": "green", "value": 80}
+                  ]
+                }
+              }
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area",
+              "reduceOptions": {
+                "values": false,
+                "calcs": ["last"]
+              }
+            }
+          }
+        ]
+    }

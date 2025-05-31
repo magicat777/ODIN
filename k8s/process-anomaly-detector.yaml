@@ -1,0 +1,785 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: process-anomaly-detector-script
+  namespace: monitoring
+data:
+  process_anomaly_detector.py: |
+    #!/usr/bin/env python3
+    import time
+    import numpy as np
+    import pandas as pd
+    from datetime import datetime, timedelta
+    import requests
+    import logging
+    import json
+    import os
+    import pickle
+    import threading
+    import re
+    from prometheus_client import start_http_server, Gauge, Counter, Histogram
+    from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.cluster import DBSCAN
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import warnings
+    warnings.filterwarnings('ignore')
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger('process-anomaly-detector')
+    
+    # Prometheus metrics
+    process_anomaly_score = Gauge('process_anomaly_score', 'Process anomaly score', ['process_name', 'anomaly_type', 'algorithm'])
+    unusual_process_detected = Gauge('unusual_process_detected', 'Unusual process detected', ['process_name', 'reason'])
+    process_resource_anomaly = Gauge('process_resource_anomaly_score', 'Process resource usage anomaly', ['process_name', 'resource_type'])
+    process_behavior_anomaly = Gauge('process_behavior_anomaly_score', 'Process behavior anomaly', ['process_name', 'behavior_type'])
+    new_process_alert = Gauge('new_process_alert', 'New/unknown process detected', ['process_name', 'command'])
+    model_training_duration = Histogram('process_anomaly_model_training_duration_seconds', 'Model training duration')
+    model_updates = Counter('process_anomaly_model_updates_total', 'Total model updates', ['anomaly_type'])
+    detection_errors = Counter('process_anomaly_detection_errors_total', 'Total detection errors', ['anomaly_type'])
+    health_status = Gauge('process_anomaly_detector_health', 'Health status of process anomaly detector')
+    processes_analyzed = Counter('processes_analyzed_total', 'Total processes analyzed', ['analysis_type'])
+    
+    # Configuration
+    PROMETHEUS_URL = os.getenv('PROMETHEUS_URL', 'http://prometheus:9090')
+    MODEL_PATH = '/models'
+    UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', '120'))  # 2 minutes
+    TRAINING_WINDOW = os.getenv('TRAINING_WINDOW', '7d')
+    
+    # Process Analysis Configuration
+    PROCESS_METRICS = [
+        {
+            'name': 'cpu_usage_per_process',
+            'query': 'topk(20, rate(namedprocess_namegroup_cpu_seconds_total[5m]))',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.1,
+            'min_samples': 50
+        },
+        {
+            'name': 'memory_usage_per_process',
+            'query': 'topk(20, namedprocess_namegroup_memory_bytes)',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.1,
+            'min_samples': 50
+        },
+        {
+            'name': 'process_count_per_name',
+            'query': 'namedprocess_namegroup_num_procs',
+            'algorithm': 'statistical',
+            'z_threshold': 3,
+            'min_samples': 30
+        },
+        {
+            'name': 'file_descriptors_per_process',
+            'query': 'namedprocess_namegroup_open_filedesc',
+            'algorithm': 'statistical',
+            'z_threshold': 2.5,
+            'min_samples': 30
+        },
+        {
+            'name': 'context_switches_per_process',
+            'query': 'rate(namedprocess_namegroup_context_switches_total[5m])',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.15,
+            'min_samples': 40
+        }
+    ]
+    
+    # Suspicious Process Patterns
+    SUSPICIOUS_PATTERNS = [
+        {
+            'name': 'crypto_miners',
+            'patterns': [r'.*miner.*', r'.*xmrig.*', r'.*mining.*', r'.*cryptonight.*', r'.*monero.*'],
+            'severity': 'critical'
+        },
+        {
+            'name': 'reverse_shells',
+            'patterns': [r'.*nc\s+-l.*', r'.*netcat.*-l.*', r'.*bash\s+-i.*', r'.*sh\s+-i.*'],
+            'severity': 'critical'
+        },
+        {
+            'name': 'privilege_escalation',
+            'patterns': [r'.*sudo\s+su.*', r'.*sudo\s+-s.*', r'.*pkexec.*', r'.*gksu.*'],
+            'severity': 'high'
+        },
+        {
+            'name': 'data_exfiltration',
+            'patterns': [r'.*curl.*\|.*', r'.*wget.*\|.*', r'.*tar.*\|.*nc.*', r'.*dd.*\|.*'],
+            'severity': 'high'
+        },
+        {
+            'name': 'persistence_mechanisms',
+            'patterns': [r'.*crontab.*', r'.*systemctl.*enable.*', r'.*chkconfig.*on.*'],
+            'severity': 'medium'
+        },
+        {
+            'name': 'unusual_network_tools',
+            'patterns': [r'.*nmap.*', r'.*masscan.*', r'.*zmap.*', r'.*gobuster.*', r'.*dirb.*'],
+            'severity': 'medium'
+        },
+        {
+            'name': 'compiler_execution',
+            'patterns': [r'.*gcc.*-o.*', r'.*g\+\+.*-o.*', r'.*make.*', r'.*cmake.*'],
+            'severity': 'low'
+        }
+    ]
+    
+    # Expected System Processes (whitelist)
+    EXPECTED_PROCESSES = {
+        'system': ['systemd', 'kthreadd', 'ksoftirqd', 'rcu_preempt', 'rcu_tasks', 'watchdog'],
+        'kernel': ['migration', 'idle_inject', 'cpuhp', 'kworker', 'kdevtmpfs', 'kauditd'],
+        'desktop': ['gnome-shell', 'Xorg', 'gdm', 'pulseaudio', 'networkd-dispatcher'],
+        'monitoring': ['prometheus', 'grafana', 'loki', 'promtail', 'alertmanager', 'cadvisor'],
+        'containers': ['containerd', 'k3s', 'kubectl', 'docker'],
+        'development': ['python', 'node', 'npm', 'pip', 'git', 'code', 'vim', 'emacs'],
+        'security': ['fail2ban', 'ufw', 'sudo'],
+        'networking': ['NetworkManager', 'wpa_supplicant', 'dhclient', 'systemd-resolved']
+    }
+    
+    # Global health status
+    health_info = {
+        'healthy': True,
+        'last_update': datetime.now(),
+        'errors': [],
+        'prometheus_available': False,
+        'suspicious_processes': [],
+        'new_processes': []
+    }
+    
+    class HealthCheckHandler(BaseHTTPRequestHandler):
+        """HTTP handler for health checks"""
+        def do_GET(self):
+            if self.path == '/health':
+                self.send_health_response()
+            elif self.path == '/healthz':
+                self.send_healthz_response()
+            elif self.path == '/ready':
+                self.send_ready_response()
+            else:
+                self.send_error(404)
+        
+        def send_health_response(self):
+            """Detailed health check response"""
+            status_code = 200 if health_info['healthy'] else 503
+            response = {
+                'status': 'healthy' if status_code == 200 else 'unhealthy',
+                'timestamp': datetime.now().isoformat(),
+                'prometheus_available': health_info['prometheus_available'],
+                'last_update': health_info['last_update'].isoformat(),
+                'suspicious_processes_count': len(health_info['suspicious_processes']),
+                'new_processes_count': len(health_info['new_processes'])
+            }
+            
+            if health_info['errors']:
+                response['recent_errors'] = health_info['errors'][-5:]
+                
+            if health_info['suspicious_processes']:
+                response['suspicious_processes'] = health_info['suspicious_processes'][-10:]
+                
+            self.send_response(status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            import json
+            self.wfile.write(json.dumps(response).encode())
+        
+        def send_healthz_response(self):
+            """Simple health check for k8s"""
+            if health_info['healthy']:
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'OK')
+            else:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(b'Unhealthy')
+        
+        def send_ready_response(self):
+            """Readiness check"""
+            now = datetime.now()
+            if (now - health_info['last_update'] < timedelta(minutes=5) and 
+                health_info['prometheus_available']):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'Ready')
+            else:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(b'Not Ready')
+        
+        def log_message(self, format, *args):
+            # Suppress access logs
+            pass
+    
+    def run_health_server():
+        """Run the health check HTTP server"""
+        server = HTTPServer(('', 8080), HealthCheckHandler)
+        server.serve_forever()
+    
+    class ProcessAnomalyDetector:
+        def __init__(self):
+            self.models = {}
+            self.scalers = {}
+            self.thresholds = {}
+            self.known_processes = set()
+            self.process_baselines = {}
+            os.makedirs(MODEL_PATH, exist_ok=True)
+            
+            # Initialize known processes from whitelist
+            for category, processes in EXPECTED_PROCESSES.items():
+                self.known_processes.update(processes)
+                
+            self.load_models()
+            self.load_process_baselines()
+            
+        def load_models(self):
+            """Load saved models from disk"""
+            for metric in PROCESS_METRICS:
+                model_file = os.path.join(MODEL_PATH, f"process_{metric['name'].replace('/', '_')}.pkl")
+                if os.path.exists(model_file):
+                    try:
+                        with open(model_file, 'rb') as f:
+                            data = pickle.load(f)
+                            self.models[metric['name']] = data['model']
+                            self.scalers[metric['name']] = data.get('scaler')
+                            self.thresholds[metric['name']] = data.get('thresholds', {})
+                            logger.info(f"Loaded process model for {metric['name']}")
+                    except Exception as e:
+                        logger.error(f"Failed to load process model for {metric['name']}: {e}")
+                        
+        def save_model(self, metric_name):
+            """Save model to disk"""
+            if metric_name in self.models:
+                model_file = os.path.join(MODEL_PATH, f"process_{metric_name.replace('/', '_')}.pkl")
+                try:
+                    with open(model_file, 'wb') as f:
+                        pickle.dump({
+                            'model': self.models[metric_name],
+                            'scaler': self.scalers.get(metric_name),
+                            'thresholds': self.thresholds.get(metric_name, {})
+                        }, f)
+                    logger.info(f"Saved process model for {metric_name}")
+                except Exception as e:
+                    logger.error(f"Failed to save process model for {metric_name}: {e}")
+                    
+        def load_process_baselines(self):
+            """Load process behavior baselines"""
+            baseline_file = os.path.join(MODEL_PATH, 'process_baselines.pkl')
+            if os.path.exists(baseline_file):
+                try:
+                    with open(baseline_file, 'rb') as f:
+                        data = pickle.load(f)
+                        self.process_baselines = data.get('baselines', {})
+                        self.known_processes.update(data.get('known_processes', set()))
+                        logger.info(f"Loaded {len(self.process_baselines)} process baselines")
+                except Exception as e:
+                    logger.error(f"Failed to load process baselines: {e}")
+                    
+        def save_process_baselines(self):
+            """Save process behavior baselines"""
+            baseline_file = os.path.join(MODEL_PATH, 'process_baselines.pkl')
+            try:
+                with open(baseline_file, 'wb') as f:
+                    pickle.dump({
+                        'baselines': self.process_baselines,
+                        'known_processes': self.known_processes
+                    }, f)
+                logger.info(f"Saved {len(self.process_baselines)} process baselines")
+            except Exception as e:
+                logger.error(f"Failed to save process baselines: {e}")
+                
+        def query_prometheus(self, query, start_time=None, end_time=None, step='60s'):
+            """Query Prometheus for metric data"""
+            if not start_time:
+                end_time = datetime.now()
+                start_time = end_time - timedelta(days=7)
+                
+            params = {
+                'query': query,
+                'start': start_time.timestamp(),
+                'end': end_time.timestamp(),
+                'step': step
+            }
+            
+            try:
+                response = requests.get(f"{PROMETHEUS_URL}/api/v1/query_range", params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                
+                health_info['prometheus_available'] = True
+                
+                if data['status'] == 'success' and data['data']['result']:
+                    # Process multiple time series
+                    all_data = []
+                    for result in data['data']['result']:
+                        for timestamp, value in result['values']:
+                            row = {'timestamp': float(timestamp), 'value': float(value)}
+                            # Add labels as additional features
+                            for label, label_value in result['metric'].items():
+                                if label not in ['__name__', 'instance', 'job']:
+                                    row[label] = label_value
+                            all_data.append(row)
+                    
+                    if all_data:
+                        return pd.DataFrame(all_data)
+                        
+            except Exception as e:
+                logger.error(f"Failed to query Prometheus: {e}")
+                health_info['prometheus_available'] = False
+                health_info['errors'].append(f"Prometheus error: {str(e)}")
+                detection_errors.labels(anomaly_type=query).inc()
+                
+            return pd.DataFrame()
+            
+        def query_instant(self, query):
+            """Query Prometheus for instant values"""
+            try:
+                response = requests.get(f"{PROMETHEUS_URL}/api/v1/query", params={'query': query}, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                
+                health_info['prometheus_available'] = True
+                
+                if data['status'] == 'success' and data['data']['result']:
+                    results = []
+                    for result in data['data']['result']:
+                        row = {
+                            'value': float(result['value'][1]),
+                            'labels': result['metric']
+                        }
+                        results.append(row)
+                    return results
+                    
+            except Exception as e:
+                logger.error(f"Failed to query instant value: {e}")
+                health_info['prometheus_available'] = False
+                
+            return []
+            
+        def check_suspicious_patterns(self, process_name, command_line=""):
+            """Check if a process matches suspicious patterns"""
+            full_command = f"{process_name} {command_line}".lower()
+            
+            for pattern_group in SUSPICIOUS_PATTERNS:
+                for pattern in pattern_group['patterns']:
+                    if re.search(pattern, full_command, re.IGNORECASE):
+                        return {
+                            'matched': True,
+                            'pattern_type': pattern_group['name'],
+                            'severity': pattern_group['severity'],
+                            'pattern': pattern
+                        }
+            return {'matched': False}
+            
+        def is_known_process(self, process_name):
+            """Check if a process is in the known/expected list"""
+            # Direct match
+            if process_name in self.known_processes:
+                return True
+                
+            # Partial match for processes with versions/paths
+            for known in self.known_processes:
+                if (known in process_name.lower() or 
+                    process_name.lower() in known or
+                    process_name.lower().startswith(known.lower())):
+                    return True
+                    
+            return False
+            
+        def detect_new_processes(self):
+            """Detect new/unknown processes"""
+            try:
+                # Query current running processes
+                query = 'namedprocess_namegroup_num_procs > 0'
+                current_processes = self.query_instant(query)
+                
+                new_processes = []
+                
+                for result in current_processes:
+                    labels = result['labels']
+                    process_name = labels.get('groupname', 'unknown')
+                    
+                    processes_analyzed.labels(analysis_type='new_process_check').inc()
+                    
+                    if not self.is_known_process(process_name):
+                        # This is a new/unknown process
+                        suspicious_check = self.check_suspicious_patterns(process_name)
+                        
+                        new_process_info = {
+                            'name': process_name,
+                            'timestamp': datetime.now().isoformat(),
+                            'suspicious': suspicious_check['matched'],
+                            'severity': suspicious_check.get('severity', 'info')
+                        }
+                        
+                        new_processes.append(new_process_info)
+                        
+                        # Update metrics
+                        new_process_alert.labels(
+                            process_name=process_name,
+                            command=process_name
+                        ).set(1)
+                        
+                        if suspicious_check['matched']:
+                            unusual_process_detected.labels(
+                                process_name=process_name,
+                                reason=suspicious_check['pattern_type']
+                            ).set(1)
+                            
+                            logger.warning(f"Suspicious process detected: {process_name} - {suspicious_check['pattern_type']}")
+                        else:
+                            logger.info(f"New unknown process detected: {process_name}")
+                        
+                        # Add to known processes to avoid repeated alerts
+                        self.known_processes.add(process_name)
+                
+                health_info['new_processes'] = new_processes
+                
+            except Exception as e:
+                logger.error(f"Error detecting new processes: {e}")
+                detection_errors.labels(anomaly_type='new_process_detection').inc()
+                
+        def train_isolation_forest(self, metric_config, data):
+            """Train Isolation Forest model for process metrics"""
+            if len(data) < metric_config['min_samples']:
+                logger.warning(f"Insufficient data for process {metric_config['name']}: {len(data)} samples")
+                return None, None
+                
+            # Prepare features - include process metadata
+            feature_cols = ['value']
+            if 'groupname' in data.columns:
+                # Convert categorical to numeric
+                data['process_hash'] = pd.Categorical(data['groupname']).codes
+                feature_cols.append('process_hash')
+                
+            # Add time-based features
+            data['hour'] = pd.to_datetime(data['timestamp'], unit='s').dt.hour
+            data['dayofweek'] = pd.to_datetime(data['timestamp'], unit='s').dt.dayofweek
+            feature_cols.extend(['hour', 'dayofweek'])
+            
+            X = data[feature_cols].values
+            
+            # Scale features
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            
+            # Train model
+            model = IsolationForest(
+                contamination=metric_config['sensitivity'],
+                random_state=42,
+                n_estimators=100
+            )
+            
+            with model_training_duration.time():
+                model.fit(X_scaled)
+                
+            model_updates.labels(anomaly_type=metric_config['name']).inc()
+            
+            return model, scaler
+            
+        def train_statistical_model(self, metric_config, data):
+            """Train statistical anomaly detection model"""
+            if len(data) < metric_config['min_samples']:
+                logger.warning(f"Insufficient data for process {metric_config['name']}: {len(data)} samples")
+                return None
+                
+            values = data['value'].values
+            
+            # Calculate statistics per process if available
+            thresholds = {
+                'global': {
+                    'mean': np.mean(values),
+                    'std': np.std(values),
+                    'p99': np.percentile(values, 99),
+                    'p95': np.percentile(values, 95),
+                    'p05': np.percentile(values, 5),
+                    'p01': np.percentile(values, 1)
+                }
+            }
+            
+            # Per-process thresholds if process data available
+            if 'groupname' in data.columns:
+                thresholds['per_process'] = {}
+                for process in data['groupname'].unique():
+                    process_data = data[data['groupname'] == process]['value'].values
+                    if len(process_data) >= 10:  # Minimum samples per process
+                        thresholds['per_process'][process] = {
+                            'mean': np.mean(process_data),
+                            'std': np.std(process_data),
+                            'p95': np.percentile(process_data, 95)
+                        }
+            
+            model_updates.labels(anomaly_type=metric_config['name']).inc()
+            
+            return thresholds
+            
+        def detect_process_anomalies(self, metric_config):
+            """Detect anomalies for process metrics"""
+            try:
+                # Query current values
+                current_results = self.query_instant(metric_config['query'])
+                
+                if not current_results:
+                    logger.debug(f"No data for process {metric_config['name']}")
+                    return
+                    
+                for result in current_results:
+                    current_value = result['value']
+                    labels = result['labels']
+                    
+                    # Extract process name
+                    process_name = labels.get('groupname', labels.get('name', 'unknown'))
+                    
+                    processes_analyzed.labels(analysis_type='anomaly_detection').inc()
+                    
+                    if metric_config['algorithm'] == 'isolation_forest':
+                        if metric_config['name'] in self.models:
+                            model = self.models[metric_config['name']]
+                            scaler = self.scalers[metric_config['name']]
+                            
+                            # Prepare features
+                            now = datetime.now()
+                            hour = now.hour
+                            dayofweek = now.weekday()
+                            
+                            # Create feature vector matching training
+                            features = [current_value, hour, dayofweek]
+                            X = np.array([features])
+                            X_scaled = scaler.transform(X)
+                            
+                            # Get anomaly score
+                            score = model.decision_function(X_scaled)[0]
+                            normalized_score = 50 + (score * 50)
+                            normalized_score = max(0, min(100, normalized_score))
+                            
+                            process_anomaly_score.labels(
+                                process_name=process_name,
+                                anomaly_type=metric_config['name'],
+                                algorithm='isolation_forest'
+                            ).set(100 - normalized_score)
+                            
+                            # Alert on high anomaly scores
+                            if (100 - normalized_score) > 80:
+                                logger.warning(f"High process anomaly detected: {process_name} - {metric_config['name']} score: {100-normalized_score}")
+                            
+                            logger.debug(f"Process {metric_config['name']} [{process_name}]: value={current_value}, score={100-normalized_score}")
+                            
+                    elif metric_config['algorithm'] == 'statistical':
+                        if metric_config['name'] in self.thresholds:
+                            thresholds = self.thresholds[metric_config['name']]
+                            
+                            # Use process-specific thresholds if available
+                            threshold_data = thresholds['global']
+                            if ('per_process' in thresholds and 
+                                process_name in thresholds['per_process']):
+                                threshold_data = thresholds['per_process'][process_name]
+                            
+                            # Calculate z-score
+                            z_score = abs((current_value - threshold_data['mean']) / (threshold_data['std'] + 1e-10))
+                            
+                            # Convert to 0-100 scale
+                            score = min(100, (z_score / metric_config['z_threshold']) * 100)
+                            
+                            process_anomaly_score.labels(
+                                process_name=process_name,
+                                anomaly_type=metric_config['name'],
+                                algorithm='statistical'
+                            ).set(score)
+                            
+                            # Alert on high anomaly scores
+                            if score > 80:
+                                logger.warning(f"High process anomaly detected: {process_name} - {metric_config['name']} z-score: {z_score}")
+                            
+                            logger.debug(f"Process {metric_config['name']} [{process_name}]: value={current_value}, z-score={z_score}, score={score}")
+                        
+            except Exception as e:
+                logger.error(f"Error detecting process anomalies for {metric_config['name']}: {e}")
+                detection_errors.labels(anomaly_type=metric_config['name']).inc()
+                
+        def update_models(self):
+            """Update all process anomaly detection models"""
+            logger.info("Updating process anomaly detection models...")
+            
+            for metric_config in PROCESS_METRICS:
+                try:
+                    # Query training data
+                    training_data = self.query_prometheus(metric_config['query'])
+                    
+                    if training_data.empty:
+                        logger.warning(f"No training data for process {metric_config['name']}")
+                        continue
+                        
+                    if metric_config['algorithm'] == 'isolation_forest':
+                        model, scaler = self.train_isolation_forest(metric_config, training_data)
+                        if model:
+                            self.models[metric_config['name']] = model
+                            self.scalers[metric_config['name']] = scaler
+                            self.save_model(metric_config['name'])
+                            
+                    elif metric_config['algorithm'] == 'statistical':
+                        thresholds = self.train_statistical_model(metric_config, training_data)
+                        if thresholds:
+                            self.thresholds[metric_config['name']] = thresholds
+                            self.save_model(metric_config['name'])
+                            
+                    logger.info(f"Updated process model for {metric_config['name']}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to update process model for {metric_config['name']}: {e}")
+                    health_info['errors'].append(f"Model update error: {str(e)}")
+                    
+            # Save updated process baselines
+            self.save_process_baselines()
+                    
+        def run(self):
+            """Main process anomaly detection loop"""
+            # Initial model training
+            self.update_models()
+            
+            last_model_update = time.time()
+            
+            while True:
+                try:
+                    # Detect new/unknown processes
+                    self.detect_new_processes()
+                    
+                    # Detect anomalies for all metrics
+                    for metric_config in PROCESS_METRICS:
+                        self.detect_process_anomalies(metric_config)
+                        
+                    # Update models periodically (every 6 hours)
+                    if time.time() - last_model_update > 21600:
+                        self.update_models()
+                        last_model_update = time.time()
+                        
+                    # Update health status
+                    health_info['healthy'] = health_info['prometheus_available']
+                    health_info['last_update'] = datetime.now()
+                    health_status.set(1 if health_info['healthy'] else 0)
+                    
+                    time.sleep(UPDATE_INTERVAL)
+                    
+                except Exception as e:
+                    logger.error(f"Error in process anomaly detection loop: {e}")
+                    health_info['healthy'] = False
+                    health_info['errors'].append(f"Main loop error: {str(e)}")
+                    health_status.set(0)
+                    time.sleep(60)
+    
+    def main():
+        # Start Prometheus metrics server
+        start_http_server(9407)
+        logger.info("Started process anomaly detection metrics server on port 9407")
+        
+        # Start health check server in a separate thread
+        health_thread = threading.Thread(target=run_health_server, daemon=True)
+        health_thread.start()
+        logger.info("Started health check server on port 8080")
+        
+        # Start process anomaly detector
+        detector = ProcessAnomalyDetector()
+        detector.run()
+    
+    if __name__ == '__main__':
+        main()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: process-anomaly-detector
+  namespace: monitoring
+  labels:
+    app: process-anomaly-detector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: process-anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: process-anomaly-detector
+    spec:
+      containers:
+      - name: process-anomaly-detector
+        image: python:3.11-slim
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          apt-get update && apt-get install -y gcc g++ && \
+          pip install --no-cache-dir -r /requirements/requirements.txt && \
+          python /app/process_anomaly_detector.py
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus:9090"
+        - name: UPDATE_INTERVAL
+          value: "120"  # 2 minute updates
+        - name: TRAINING_WINDOW
+          value: "7d"
+        ports:
+        - containerPort: 9407
+          name: metrics
+        - containerPort: 8080
+          name: health
+        volumeMounts:
+        - name: script
+          mountPath: /app
+        - name: requirements
+          mountPath: /requirements
+        - name: models
+          mountPath: /models
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: script
+        configMap:
+          name: process-anomaly-detector-script
+          defaultMode: 0755
+      - name: requirements
+        configMap:
+          name: anomaly-detector-requirements
+      - name: models
+        persistentVolumeClaim:
+          claimName: anomaly-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: process-anomaly-detector
+  namespace: monitoring
+  labels:
+    app: process-anomaly-detector
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9407"
+    prometheus.io/path: "/metrics"
+spec:
+  ports:
+  - port: 9407
+    targetPort: 9407
+    name: metrics
+  - port: 8080
+    targetPort: 8080
+    name: health
+  selector:
+    app: process-anomaly-detector

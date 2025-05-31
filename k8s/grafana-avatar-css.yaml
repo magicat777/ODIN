@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-avatar-css
+  namespace: monitoring
+data:
+  avatar-override.css: |
+    /* Override user avatar with ODIN logo */
+    
+    /* Top bar user avatar */
+    .toolbar-user-avatar,
+    .page-toolbar-user-avatar,
+    [class*="UserAvatar"],
+    [class*="user-avatar"],
+    img[alt="User avatar"],
+    img[alt="admin avatar"] {
+      content: url('/public/img/grafana_icon.svg') !important;
+      width: 30px !important;
+      height: 30px !important;
+      border-radius: 50% !important;
+      background: #1a1a1a !important;
+      padding: 2px !important;
+    }
+    
+    /* Profile page avatar */
+    .user-profile-avatar,
+    [class*="UserProfile"] img {
+      content: url('/public/img/grafana_icon.svg') !important;
+      width: 128px !important;
+      height: 128px !important;
+      border-radius: 50% !important;
+      background: #1a1a1a !important;
+      padding: 10px !important;
+    }
+    
+    /* Fallback for initial avatars */
+    [class*="UserAvatar__fallback"],
+    .avatar-fallback {
+      display: none !important;
+    }
+    
+    /* Override the initials display */
+    [class*="UserAvatar__initials"] {
+      background-image: url('/public/img/grafana_icon.svg') !important;
+      background-size: cover !important;
+      background-position: center !important;
+      color: transparent !important;
+    }
+  
+  avatar-override.js: |
+    // Replace avatar images with ODIN logo
+    (function() {
+      const replaceAvatars = () => {
+        // Find all avatar images and divs
+        const avatarSelectors = [
+          'img[alt*="avatar"]',
+          'img[alt*="Avatar"]',
+          'img[src*="avatar"]',
+          'div[class*="UserAvatar"]',
+          'div[class*="user-avatar"]',
+          '.toolbar-user-avatar'
+        ];
+        
+        avatarSelectors.forEach(selector => {
+          document.querySelectorAll(selector).forEach(element => {
+            if (element.tagName === 'IMG') {
+              element.src = '/public/img/grafana_icon.svg';
+              element.style.borderRadius = '50%';
+              element.style.background = '#1a1a1a';
+              element.style.padding = '2px';
+            } else if (element.tagName === 'DIV') {
+              element.style.backgroundImage = 'url(/public/img/grafana_icon.svg)';
+              element.style.backgroundSize = 'cover';
+              element.style.backgroundPosition = 'center';
+              element.textContent = '';
+            }
+          });
+        });
+      };
+      
+      // Run on page load
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', replaceAvatars);
+      } else {
+        replaceAvatars();
+      }
+      
+      // Run periodically to catch dynamically loaded content
+      setInterval(replaceAvatars, 1000);
+    })();

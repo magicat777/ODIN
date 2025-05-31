@@ -1,0 +1,303 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odin-ml-dashboards
+  namespace: monitoring
+data:
+  ml-anomaly-detection.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "ml-anomaly-detection",
+        "title": "ML Anomaly Detection",
+        "tags": ["odin", "anomaly", "ml", "ai"],
+        "timezone": "browser",
+        "schemaVersion": 38,
+        "version": 1,
+        "refresh": "30s",
+        "panels": [
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+            "id": 1,
+            "type": "text",
+            "title": "",
+            "options": {
+              "mode": "markdown",
+              "content": "# ML-Based Anomaly Detection\n\nThis dashboard shows anomaly scores using machine learning algorithms:\n- **0-40%**: Normal (Green)\n- **40-60%**: Slight Deviation (Yellow)\n- **60-80%**: Warning (Orange)\n- **80-100%**: Critical (Red)"
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 40},
+                    {"color": "orange", "value": 60},
+                    {"color": "red", "value": 80}
+                  ]
+                },
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+            "id": 2,
+            "type": "timeseries",
+            "title": "GPU Temperature Anomaly Score",
+            "targets": [
+              {
+                "expr": "anomaly_score{metric_name=\"nvidia_gpu_temperature_celsius\"}",
+                "legendFormat": "GPU Temp Anomaly",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 40},
+                    {"color": "orange", "value": 60},
+                    {"color": "red", "value": 80}
+                  ]
+                },
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+            "id": 3,
+            "type": "timeseries",
+            "title": "GPU Power Anomaly Score",
+            "targets": [
+              {
+                "expr": "anomaly_score{metric_name=\"node_gpu_power_watts\"}",
+                "legendFormat": "GPU Power Anomaly",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 40},
+                    {"color": "orange", "value": 60},
+                    {"color": "red", "value": 80}
+                  ]
+                },
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            },
+            "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
+            "id": 4,
+            "type": "gauge",
+            "title": "CPU Usage Anomaly",
+            "targets": [
+              {
+                "expr": "anomaly_score{metric_name=\"cpu_usage_percent\"}",
+                "instant": true,
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 40},
+                    {"color": "orange", "value": 60},
+                    {"color": "red", "value": 80}
+                  ]
+                },
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            },
+            "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12},
+            "id": 5,
+            "type": "gauge",
+            "title": "Memory Anomaly",
+            "targets": [
+              {
+                "expr": "anomaly_score{metric_name=\"node_memory_MemAvailable_bytes\"}",
+                "instant": true,
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 40},
+                    {"color": "orange", "value": 60},
+                    {"color": "red", "value": 80}
+                  ]
+                },
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            },
+            "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12},
+            "id": 6,
+            "type": "gauge",
+            "title": "Network Anomaly",
+            "targets": [
+              {
+                "expr": "anomaly_score{metric_name=\"network_receive_rate\"}",
+                "instant": true,
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "align": "center",
+                  "displayMode": "color-background"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 40},
+                    {"color": "orange", "value": 60},
+                    {"color": "red", "value": 80}
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "Anomaly Score"},
+                  "properties": [
+                    {"id": "custom.displayMode", "value": "gradient-gauge"},
+                    {"id": "custom.width", "value": 200}
+                  ]
+                }
+              ]
+            },
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+            "id": 7,
+            "type": "table",
+            "title": "All Anomaly Scores",
+            "targets": [
+              {
+                "expr": "anomaly_score",
+                "format": "table",
+                "instant": true,
+                "refId": "A"
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true,
+                    "__name__": true,
+                    "job": true,
+                    "instance": true
+                  },
+                  "renameByName": {
+                    "metric_name": "Metric",
+                    "algorithm": "Algorithm",
+                    "Value": "Anomaly Score"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 6, "w": 12, "x": 0, "y": 28},
+            "id": 8,
+            "type": "stat",
+            "title": "Anomaly Detector Health",
+            "targets": [
+              {
+                "expr": "anomaly_detector_health",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "green", "value": 1}
+                  ]
+                },
+                "mappings": [
+                  {"options": {"0": {"text": "Unhealthy"}}, "type": "value"},
+                  {"options": {"1": {"text": "Healthy"}}, "type": "value"}
+                ]
+              }
+            }
+          },
+          {
+            "datasource": "Prometheus",
+            "gridPos": {"h": 6, "w": 12, "x": 12, "y": 28},
+            "id": 9,
+            "type": "stat",
+            "title": "Models Trained",
+            "targets": [
+              {
+                "expr": "count(count by (metric_name) (anomaly_model_updates_total))",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0
+              }
+            }
+          }
+        ]
+      }
+    }

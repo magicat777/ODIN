@@ -1,0 +1,233 @@
+<mxfile host="app.diagrams.net" modified="2025-05-31T17:30:00.000Z" agent="5.0" etag="abc123" version="24.4.8" type="device">
+  <diagram name="ODIN-Deployment" id="odin-deployment-diagram">
+    <mxGraphModel dx="2074" dy="1181" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="2339" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Internet Layer -->
+        <mxCell id="internet" value="Internet" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=16;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="750" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- Network Router -->
+        <mxCell id="router" value="Network Router&#xa;192.168.1.1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="730" y="140" width="160" height="40" as="geometry" />
+        </mxCell>
+        
+        <!-- Razer Blade 18 Physical Host -->
+        <mxCell id="razer-host" value="Razer Blade 18 (Physical Host)&#xa;Ubuntu 22.04.5 LTS&#xa;IP: 192.168.1.154" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="60" y="220" width="1500" height="1900" as="geometry" />
+        </mxCell>
+        
+        <!-- Hardware Layer -->
+        <mxCell id="hardware-layer" value="Hardware Layer" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="100" y="260" width="1420" height="200" as="geometry" />
+        </mxCell>
+        
+        <!-- CPU -->
+        <mxCell id="cpu" value="Intel i9-13950HX&#xa;24 Cores / 32 Threads&#xa;RAPL Power Monitoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="130" y="300" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- GPU -->
+        <mxCell id="gpu" value="NVIDIA RTX 4080&#xa;Laptop GPU&#xa;12GB VRAM&#xa;Driver: 535.230.02" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="350" y="300" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Memory -->
+        <mxCell id="memory" value="32GB DDR5 RAM&#xa;Memory Monitoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="570" y="300" width="140" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Storage -->
+        <mxCell id="storage" value="NVMe SSD&#xa;2TB Storage&#xa;Disk Monitoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="750" y="300" width="140" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Network Interface -->
+        <mxCell id="network-hw" value="Network Interface&#xa;enp110s0&#xa;Gigabit Ethernet" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="930" y="300" width="140" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Kernel/OS Layer -->
+        <mxCell id="kernel-layer" value="Linux Kernel / OS Layer&#xa;Kernel: 6.8.0-60-generic" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="100" y="500" width="1420" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- System Services -->
+        <mxCell id="systemd" value="systemd&#xa;System Manager" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" parent="1" vertex="1">
+          <mxGeometry x="130" y="540" width="100" height="60" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="nvidia-driver" value="NVIDIA Driver&#xa;535.230.02" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" parent="1" vertex="1">
+          <mxGeometry x="260" y="540" width="100" height="60" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="containerd" value="containerd&#xa;2.0.5-k3s1.32" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" parent="1" vertex="1">
+          <mxGeometry x="390" y="540" width="100" height="60" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="k3s-agent" value="K3s Agent&#xa;v1.32.5+k3s1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" parent="1" vertex="1">
+          <mxGeometry x="520" y="540" width="100" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- K3s Cluster Layer -->
+        <mxCell id="k3s-cluster" value="K3s Kubernetes Cluster&#xa;Single-Node Cluster" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="100" y="660" width="1420" height="1420" as="geometry" />
+        </mxCell>
+        
+        <!-- Monitoring Namespace -->
+        <mxCell id="monitoring-ns" value="monitoring namespace" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="140" y="700" width="1340" height="1340" as="geometry" />
+        </mxCell>
+        
+        <!-- Core Monitoring Stack -->
+        <mxCell id="core-monitoring" value="Core Monitoring Stack" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="180" y="740" width="600" height="400" as="geometry" />
+        </mxCell>
+        
+        <!-- Prometheus -->
+        <mxCell id="prometheus" value="Prometheus&#xa;prometheus-xxx&#xa;:9090 (NodePort 31493)&#xa;Metrics Collection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff9999;strokeColor=#d6b656;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="200" y="780" width="160" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Grafana -->
+        <mxCell id="grafana" value="Grafana&#xa;grafana-xxx&#xa;:3000 (NodePort 31494)&#xa;Visualization" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcc99;strokeColor=#d6b656;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="380" y="780" width="160" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Loki -->
+        <mxCell id="loki" value="Loki&#xa;loki-xxx&#xa;:3100&#xa;Log Aggregation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#99ccff;strokeColor=#6c8ebf;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="560" y="780" width="160" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- AlertManager -->
+        <mxCell id="alertmanager" value="AlertManager&#xa;alertmanager-xxx&#xa;:9093 (NodePort 31495)&#xa;Alert Routing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff99cc;strokeColor=#b85450;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="200" y="900" width="160" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- System Exporters -->
+        <mxCell id="system-exporters" value="System Exporters" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="820" y="740" width="300" height="400" as="geometry" />
+        </mxCell>
+        
+        <!-- Node Exporter -->
+        <mxCell id="node-exporter" value="Node Exporter&#xa;:9100&#xa;System Metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="840" y="780" width="130" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Power Exporter -->
+        <mxCell id="power-exporter" value="Power Exporter&#xa;:9402&#xa;GPU Metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="990" y="780" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- cAdvisor -->
+        <mxCell id="cadvisor" value="cAdvisor&#xa;:8080&#xa;Container Metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="840" y="880" width="130" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- ML Anomaly Detection Platform -->
+        <mxCell id="ml-platform" value="ML Anomaly Detection Platform" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="180" y="1180" width="940" height="280" as="geometry" />
+        </mxCell>
+        
+        <!-- GPU Anomaly Detector -->
+        <mxCell id="gpu-anomaly" value="GPU Anomaly Detector&#xa;:9405&#xa;Isolation Forest&#xa;GPU Analysis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="200" y="1220" width="180" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- K8s Pod Anomaly Detector -->
+        <mxCell id="k8s-anomaly" value="K8s Pod Anomaly&#xa;:9406&#xa;Container Analysis" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="400" y="1220" width="180" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Process Anomaly Detector -->
+        <mxCell id="process-anomaly" value="Process Anomaly&#xa;:9407&#xa;Security Monitoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="600" y="1220" width="180" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- External Services -->
+        <mxCell id="external-services" value="External Services" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="1200" y="140" width="300" height="300" as="geometry" />
+        </mxCell>
+        
+        <!-- Gmail SMTP -->
+        <mxCell id="gmail-smtp" value="Gmail SMTP&#xa;smtp.gmail.com:587&#xa;Email Notifications" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff99cc;strokeColor=#b85450;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="1220" y="180" width="160" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- Storage Layer -->
+        <mxCell id="storage-layer" value="Persistent Storage Layer" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffcc;strokeColor=#d6b656;fontSize=11;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="180" y="1500" width="940" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- Prometheus Storage -->
+        <mxCell id="prom-storage" value="Prometheus PVC&#xa;90-day retention" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ff9999;strokeColor=#d6b656;fontSize=9;" parent="1" vertex="1">
+          <mxGeometry x="200" y="1530" width="140" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- Grafana Storage -->
+        <mxCell id="grafana-storage" value="Grafana PVC&#xa;Dashboard Storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcc99;strokeColor=#d6b656;fontSize=9;" parent="1" vertex="1">
+          <mxGeometry x="360" y="1530" width="140" height="50" as="geometry" />
+        </mxCell>
+        
+        <!-- Network Connections -->
+        
+        <!-- Internet to Router -->
+        <mxCell id="internet-router" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" source="internet" target="router" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="800" y="100" as="sourcePoint" />
+            <mxPoint x="810" y="140" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Router to Razer Blade -->
+        <mxCell id="router-host" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" source="router" target="network-hw" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="810" y="180" as="sourcePoint" />
+            <mxPoint x="1000" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Exporters to Prometheus -->
+        <mxCell id="exporters-prom" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#ff9999;strokeColor=#d6b656;" parent="1" source="system-exporters" target="prometheus" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="820" y="830" as="sourcePoint" />
+            <mxPoint x="360" y="830" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- ML Platform to Prometheus -->
+        <mxCell id="ml-prom" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="1" source="ml-platform" target="prometheus" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="650" y="1180" as="sourcePoint" />
+            <mxPoint x="280" y="880" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Prometheus to Grafana -->
+        <mxCell id="prom-grafana" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#ffcc99;strokeColor=#d6b656;" parent="1" source="prometheus" target="grafana" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="830" as="sourcePoint" />
+            <mxPoint x="380" y="830" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- AlertManager to External Email -->
+        <mxCell id="alert-email" style="endArrow=classic;html=1;strokeWidth=2;fillColor=#ff99cc;strokeColor=#b85450;" parent="1" source="alertmanager" target="gmail-smtp" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="950" as="sourcePoint" />
+            <mxPoint x="1220" y="210" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Legend -->
+        <mxCell id="legend" value="ODIN System Architecture&#xa;&#xa;📊 Core Monitoring&#xa;🤖 ML Anomaly Detection&#xa;⚙️ System Exporters&#xa;🔗 External Services&#xa;💾 Persistent Storage" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="1200" y="480" width="300" height="140" as="geometry" />
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

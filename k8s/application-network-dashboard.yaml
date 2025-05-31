@@ -1,0 +1,363 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: application-network-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  application-network-dashboard.json: |
+    {
+      "uid": "app-network-analysis",
+      "title": "Application Network Analysis",
+      "description": "Per-process network connection analysis and trends",
+      "tags": ["network", "process", "application"],
+      "timezone": "browser",
+      "schemaVersion": 27,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "type": "table",
+          "title": "Top Processes by Connection Count",
+          "targets": [
+            {
+              "expr": "topk(20, sum by (pid) (process_network_connections))",
+              "format": "table",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "pid": "Process ID",
+                  "Value": "Total Connections"
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "Total Connections",
+                    "desc": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "displayMode": "gradient-gauge"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Total Connections"},
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "continuous-GrYlRd"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 2,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "type": "piechart",
+          "title": "Connection States Distribution",
+          "targets": [
+            {
+              "expr": "sum by (state) (process_network_connections{protocol=\"tcp\"})",
+              "legendFormat": "{{state}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": {"mode": "palette-classic"}
+            }
+          },
+          "options": {
+            "pieType": "donut",
+            "displayLabels": ["name", "percent", "value"],
+            "legendDisplayMode": "table",
+            "legendValues": ["value", "percent"]
+          }
+        },
+        {
+          "id": 3,
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+          "type": "table",
+          "title": "Process Connection Details",
+          "targets": [
+            {
+              "expr": "process_network_connections",
+              "format": "table",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "job": true,
+                  "instance": true,
+                  "__name__": true
+                },
+                "renameByName": {
+                  "pid": "Process ID",
+                  "state": "State",
+                  "protocol": "Protocol",
+                  "Value": "Count"
+                }
+              }
+            },
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "Process ID": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "State": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "Protocol": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "Count": {
+                    "aggregations": ["sum"],
+                    "operation": "aggregate"
+                  }
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "Count (sum)",
+                    "desc": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background",
+                "filterable": true
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "State"},
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {"type": "value", "value": "LISTEN", "text": "LISTEN", "color": "blue"},
+                      {"type": "value", "value": "ESTAB", "text": "ESTABLISHED", "color": "green"},
+                      {"type": "value", "value": "TIME_WAIT", "text": "TIME_WAIT", "color": "yellow"},
+                      {"type": "value", "value": "CLOSE_WAIT", "text": "CLOSE_WAIT", "color": "orange"},
+                      {"type": "value", "value": "SYN_SENT", "text": "SYN_SENT", "color": "purple"}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 4,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "type": "timeseries",
+          "title": "Connection Count Trends",
+          "targets": [
+            {
+              "expr": "sum by (state) (process_network_connections{protocol=\"tcp\"})",
+              "legendFormat": "{{state}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+          "type": "stat",
+          "title": "Protocol Distribution",
+          "targets": [
+            {
+              "expr": "sum by (protocol) (process_network_connections)",
+              "legendFormat": "{{protocol | upper}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "palette-classic"}
+            }
+          },
+          "options": {
+            "graphMode": "area",
+            "orientation": "horizontal",
+            "textMode": "auto",
+            "colorMode": "value",
+            "justifyMode": "auto"
+          }
+        },
+        {
+          "id": 6,
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+          "type": "timeseries",
+          "title": "Top 10 Processes - Connection History",
+          "targets": [
+            {
+              "expr": "topk(10, sum by (pid) (process_network_connections))",
+              "legendFormat": "PID: {{pid}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          }
+        },
+        {
+          "id": 7,
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 32},
+          "type": "stat",
+          "title": "Listening Services",
+          "description": "Number of processes with listening sockets",
+          "targets": [
+            {
+              "expr": "count(count by (pid) (process_network_connections{state=\"LISTEN\"}))",
+              "legendFormat": "Services"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 50},
+                  {"color": "red", "value": 100}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 8,
+          "gridPos": {"h": 6, "w": 8, "x": 8, "y": 32},
+          "type": "stat",
+          "title": "Active Connections",
+          "description": "Total established connections",
+          "targets": [
+            {
+              "expr": "sum(process_network_connections{state=\"ESTAB\"})",
+              "legendFormat": "Established"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 100},
+                  {"color": "red", "value": 500}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 9,
+          "gridPos": {"h": 6, "w": 8, "x": 16, "y": 32},
+          "type": "stat",
+          "title": "Connection Churn",
+          "description": "TIME_WAIT connections indicate recent closures",
+          "targets": [
+            {
+              "expr": "sum(process_network_connections{state=\"TIME_WAIT\"})",
+              "legendFormat": "TIME_WAIT"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 50},
+                  {"color": "orange", "value": 100},
+                  {"color": "red", "value": 200}
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }

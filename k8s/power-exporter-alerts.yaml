@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: power-exporter-alert-rules
+  namespace: monitoring
+data:
+  power-exporter-alerts.yaml: |
+    groups:
+    - name: power_exporter_health
+      interval: 30s
+      rules:
+      # Exporter Health Alerts
+      - alert: PowerExporterDown
+        expr: up{job="power-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: power-exporter
+        annotations:
+          summary: "Power exporter is down"
+          description: "Power exporter on {{ $labels.instance }} has been down for more than 2 minutes"
+          
+      - alert: PowerExporterScrapeErrors
+        expr: rate(power_exporter_scrape_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: power-exporter
+        annotations:
+          summary: "Power exporter scrape errors"
+          description: "Power exporter component {{ $labels.component }} is experiencing {{ $value }} errors per second"
+          
+      - alert: PowerExporterStale
+        expr: time() - power_exporter_last_successful_scrape_timestamp > 120
+        for: 2m
+        labels:
+          severity: warning
+          component: power-exporter
+        annotations:
+          summary: "Power exporter metrics are stale"
+          description: "Power exporter hasn't successfully collected metrics in {{ $value }} seconds"
+          
+      - alert: GPUMetricsUnavailable
+        expr: power_exporter_gpu_available == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: power-exporter
+        annotations:
+          summary: "GPU metrics unavailable"
+          description: "Power exporter cannot collect GPU metrics on {{ $labels.instance }}"
+          
+      # Component-specific health alerts
+      - alert: RAPLMetricsFailure
+        expr: increase(power_exporter_scrape_errors_total{component="rapl"}[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: power-exporter
+        annotations:
+          summary: "RAPL metrics collection failing"
+          description: "Power exporter RAPL component has {{ $value }} errors in the last 5 minutes"
+          
+      - alert: BatteryMetricsFailure
+        expr: increase(power_exporter_scrape_errors_total{component="battery"}[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: power-exporter
+        annotations:
+          summary: "Battery metrics collection failing"
+          description: "Power exporter battery component has {{ $value }} errors in the last 5 minutes"

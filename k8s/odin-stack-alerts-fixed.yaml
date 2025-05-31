@@ -1,0 +1,270 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odin-stack-alert-rules
+  namespace: monitoring
+data:
+  odin-stack-alerts.yaml: |
+    groups:
+    - name: odin_monitoring_stack
+      interval: 30s
+      rules:
+      # Prometheus
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          service: prometheus
+        annotations:
+          summary: "Prometheus is down"
+          description: "Prometheus server is unreachable. All metrics collection has stopped."
+          
+      - alert: PrometheusStorageFull
+        expr: (node_filesystem_avail_bytes{mountpoint="/var/lib/odin/prometheus"} / node_filesystem_size_bytes{mountpoint="/var/lib/odin/prometheus"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          service: prometheus
+        annotations:
+          summary: "Prometheus storage is almost full"
+          description: "Prometheus storage has less than 10% free space. Metrics may be lost."
+          
+      # Fixed memory usage alert - only alert if actually over 90%
+      - alert: PrometheusHighMemoryUsage
+        expr: (container_memory_working_set_bytes{namespace="monitoring",pod=~"prometheus-.*"} / container_spec_memory_limit_bytes{namespace="monitoring",pod=~"prometheus-.*"}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: prometheus
+        annotations:
+          summary: "Prometheus high memory usage"
+          description: "Prometheus is using {{ $value | humanizePercentage }} of its memory limit"
+          
+      - alert: PrometheusReloadFailed
+        expr: prometheus_config_last_reload_successful != 1
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: prometheus
+        annotations:
+          summary: "Prometheus configuration reload failed"
+          description: "Prometheus failed to reload its configuration. Check logs for details."
+          
+      # Grafana
+      - alert: GrafanaDown
+        expr: up{job="grafana"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          service: grafana
+        annotations:
+          summary: "Grafana is down"
+          description: "Grafana is unreachable. Dashboards and visualization unavailable."
+          
+      - alert: GrafanaDatabaseError
+        expr: increase(grafana_database_failed_queries_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: grafana
+        annotations:
+          summary: "Grafana database errors"
+          description: "Grafana is experiencing database query failures"
+          
+      # Loki - now properly configured
+      - alert: LokiDown
+        expr: up{job="loki"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          service: loki
+        annotations:
+          summary: "Loki is down"
+          description: "Loki log aggregation service is unreachable. Logs are not being stored."
+          
+      - alert: LokiStorageFull
+        expr: (node_filesystem_avail_bytes{mountpoint="/var/lib/odin/loki"} / node_filesystem_size_bytes{mountpoint="/var/lib/odin/loki"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          service: loki
+        annotations:
+          summary: "Loki storage is almost full"
+          description: "Loki storage has less than 10% free space. Logs may be lost."
+          
+      # AlertManager
+      - alert: AlertManagerDown
+        expr: up{job="alertmanager"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          service: alertmanager
+        annotations:
+          summary: "AlertManager is down"
+          description: "AlertManager is unreachable. Alerts will not be routed or sent."
+          
+      - alert: AlertManagerConfigNotSynced
+        expr: alertmanager_config_last_reload_successful != 1
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: alertmanager
+        annotations:
+          summary: "AlertManager configuration reload failed"
+          description: "AlertManager failed to reload configuration"
+          
+      # Promtail - now properly configured
+      - alert: PromtailDown
+        expr: up{job="promtail"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: promtail
+        annotations:
+          summary: "Promtail is down"
+          description: "Promtail log collector is down. Logs not being collected from {{ $labels.instance }}."
+          
+      - alert: PromtailDroppedLogs
+        expr: rate(promtail_dropped_entries_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: promtail
+        annotations:
+          summary: "Promtail dropping logs"
+          description: "Promtail is dropping {{ $value }} logs per second"
+          
+      # Node Exporter - host-based
+      - alert: NodeExporterDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          service: node-exporter
+        annotations:
+          summary: "Node Exporter is down"
+          description: "Node Exporter on {{ $labels.instance }} is down. System metrics unavailable."
+          
+      # Power Exporter (GPU) - host-based
+      - alert: PowerExporterDown
+        expr: up{job="power-exporter"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: power-exporter
+        annotations:
+          summary: "Power Exporter is down"
+          description: "Power Exporter is down. GPU metrics unavailable."
+          
+      - alert: PowerExporterUnhealthy
+        expr: power_exporter_health_status != 1
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: power-exporter
+        annotations:
+          summary: "Power Exporter is unhealthy"
+          description: "Power Exporter health check is failing"
+          
+      # cAdvisor
+      - alert: CAdvisorDown
+        expr: up{job="cadvisor"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: cadvisor
+        annotations:
+          summary: "cAdvisor is down"
+          description: "cAdvisor container metrics collector is down"
+          
+      # Kube State Metrics
+      - alert: KubeStateMetricsDown
+        expr: up{job="kube-state-metrics"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: kube-state-metrics
+        annotations:
+          summary: "Kube State Metrics is down"
+          description: "Kube State Metrics is down. Kubernetes resource metrics unavailable."
+          
+      # Claude Code Exporter - host-based
+      - alert: ClaudeCodeExporterDown
+        expr: up{job="claude-code-exporter"} == 0
+        for: 5m
+        labels:
+          severity: info
+          component: monitoring-stack
+          service: claude-code-exporter
+        annotations:
+          summary: "Claude Code Exporter is down"
+          description: "Claude Code metrics exporter is down"
+          
+      # Network Exporter - removed since no pod exists
+      # Remove this alert or deploy the network exporter if needed
+          
+      # Overall Stack Health - fixed to only check actual running services
+      - alert: MonitoringStackDegraded
+        expr: |
+          (count(up{job=~"prometheus|grafana|loki|alertmanager|node-exporter"} == 0) > 0)
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+        annotations:
+          summary: "Monitoring stack is degraded"
+          description: "{{ $value }} critical monitoring components are down"
+          
+      - alert: MonitoringStackCritical
+        expr: |
+          count(up{job=~"prometheus|grafana|loki|alertmanager"} == 0) > 2
+        for: 2m
+        labels:
+          severity: critical
+          component: monitoring-stack
+        annotations:
+          summary: "Monitoring stack critically degraded"
+          description: "{{ $value }} core monitoring components are down. Immediate action required!"
+          
+    - name: odin_backup_alerts
+      interval: 60s
+      rules:
+      - alert: DashboardBackupFailed
+        expr: time() - backup_dashboard_last_success_timestamp > 93600  # 26 hours
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          service: backup
+        annotations:
+          summary: "Dashboard backup has not run successfully"
+          description: "Dashboard backup hasn't completed successfully in {{ $value | humanizeDuration }}"
+          
+      - alert: BackupStorageFull
+        expr: (node_filesystem_avail_bytes{mountpoint="/home/magicat777/projects/ODIN/backups"} / node_filesystem_size_bytes{mountpoint="/home/magicat777/projects/ODIN/backups"}) < 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          service: backup
+        annotations:
+          summary: "Backup storage is full"
+          description: "Backup storage has less than 5% free space"

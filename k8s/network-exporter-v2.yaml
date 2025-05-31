@@ -1,0 +1,208 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-exporter-script-v2
+  namespace: monitoring
+data:
+  network-exporter.py: |
+    #!/usr/bin/env python3
+    import os
+    import time
+    import subprocess
+    import re
+    from collections import defaultdict
+    from prometheus_client import start_http_server, Gauge, Counter
+    
+    # Define Prometheus metrics
+    process_network_connections = Gauge('process_network_connections', 'Number of network connections by process', ['pid', 'state', 'protocol'])
+    system_tcp_connections = Gauge('system_tcp_connections_total', 'Total TCP connections by state', ['state'])
+    system_udp_connections = Gauge('system_udp_connections_total', 'Total UDP connections')
+    
+    def get_process_name(pid):
+        """Get process name from PID"""
+        try:
+            with open(f'/proc/{pid}/comm', 'r') as f:
+                return f.read().strip()
+        except:
+            return None
+    
+    def parse_proc_net_tcp():
+        """Parse /proc/net/tcp for TCP connections"""
+        TCP_STATES = {
+            '01': 'ESTAB',
+            '02': 'SYN_SENT',
+            '03': 'SYN_RECV',
+            '04': 'FIN_WAIT1',
+            '05': 'FIN_WAIT2',
+            '06': 'TIME_WAIT',
+            '07': 'CLOSE',
+            '08': 'CLOSE_WAIT',
+            '09': 'LAST_ACK',
+            '0A': 'LISTEN',
+            '0B': 'CLOSING'
+        }
+        
+        connections = defaultdict(int)
+        
+        try:
+            with open('/proc/net/tcp', 'r') as f:
+                lines = f.readlines()[1:]  # Skip header
+                
+            for line in lines:
+                parts = line.split()
+                if len(parts) >= 10:
+                    state = parts[3]
+                    state_name = TCP_STATES.get(state, 'UNKNOWN')
+                    connections[state_name] += 1
+                    
+                    # Try to get inode to match with process
+                    inode = parts[9]
+                    if inode != '0':
+                        # Find process that owns this socket
+                        for pid in os.listdir('/proc'):
+                            if not pid.isdigit():
+                                continue
+                            try:
+                                fd_path = f'/proc/{pid}/fd'
+                                if os.path.exists(fd_path):
+                                    for fd in os.listdir(fd_path):
+                                        try:
+                                            link = os.readlink(f'{fd_path}/{fd}')
+                                            if f'socket:[{inode}]' in link:
+                                                process_network_connections.labels(
+                                                    pid=pid,
+                                                    state=state_name,
+                                                    protocol='tcp'
+                                                ).set(1)
+                                        except:
+                                            pass
+                            except:
+                                pass
+            
+            # Update system-wide metrics
+            for state, count in connections.items():
+                system_tcp_connections.labels(state=state).set(count)
+                
+        except Exception as e:
+            print(f"Error parsing /proc/net/tcp: {e}")
+    
+    def parse_proc_net_udp():
+        """Parse /proc/net/udp for UDP connections"""
+        try:
+            with open('/proc/net/udp', 'r') as f:
+                lines = f.readlines()[1:]  # Skip header
+                
+            udp_count = len(lines)
+            system_udp_connections.set(udp_count)
+            
+        except Exception as e:
+            print(f"Error parsing /proc/net/udp: {e}")
+    
+    def collect_network_metrics():
+        """Collect network metrics from /proc/net"""
+        # Reset metrics
+        process_network_connections._metrics.clear()
+        
+        # Collect TCP connections
+        parse_proc_net_tcp()
+        
+        # Collect UDP connections
+        parse_proc_net_udp()
+    
+    if __name__ == '__main__':
+        # Start Prometheus metrics server
+        start_http_server(9404)
+        
+        print("Network exporter v2 started on port 9404")
+        
+        # Collect metrics every 10 seconds
+        while True:
+            try:
+                collect_network_metrics()
+            except Exception as e:
+                print(f"Error collecting metrics: {e}")
+            time.sleep(10)
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: network-exporter-v2
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: network-exporter-v2
+  template:
+    metadata:
+      labels:
+        app: network-exporter-v2
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: network-exporter
+        image: python:3.10-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install prometheus_client
+          python /scripts/network-exporter.py
+        ports:
+        - containerPort: 9404
+          hostPort: 9404
+          name: metrics
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: proc
+          mountPath: /proc
+          readOnly: true
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        securityContext:
+          runAsUser: 0
+          privileged: true
+          capabilities:
+            add:
+            - NET_ADMIN
+            - SYS_PTRACE
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import urllib.request; urllib.request.urlopen('http://localhost:9404/metrics')"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - name: script
+        configMap:
+          name: network-exporter-script-v2
+          defaultMode: 0755
+      - name: proc
+        hostPath:
+          path: /proc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: network-exporter-v2
+  namespace: monitoring
+  labels:
+    app: network-exporter-v2
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9404
+    targetPort: 9404
+  selector:
+    app: network-exporter-v2

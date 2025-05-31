@@ -1,0 +1,400 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-analysis-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  network-analysis-dashboard.json: |
+    {
+      "uid": "network-analysis",
+      "title": "Network Traffic Analysis",
+      "tags": ["network", "traffic", "razerblade"],
+      "timezone": "browser",
+      "schemaVersion": 27,
+      "version": 2,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "type": "timeseries",
+          "title": "Network Interface Traffic",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "RX: {{device}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m]) * -1",
+              "legendFormat": "TX: {{device}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "binBps",
+              "decimals": 2,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "type": "stat",
+          "title": "Current Network Usage",
+          "targets": [
+            {
+              "expr": "sum(rate(node_network_receive_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m]))",
+              "legendFormat": "Total RX"
+            },
+            {
+              "expr": "sum(rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m]))",
+              "legendFormat": "Total TX"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "binBps",
+              "decimals": 2,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 10485760},
+                  {"color": "red", "value": 104857600}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "type": "table",
+          "title": "Process Network Activity (by CPU usage as proxy)",
+          "targets": [
+            {
+              "expr": "topk(10, rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100",
+              "format": "table",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "groupname": "Process",
+                  "Value": "CPU %"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 2,
+              "custom": {
+                "align": "auto",
+                "displayMode": "gradient-gauge"
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "type": "piechart",
+          "title": "Network Connections by State",
+          "targets": [
+            {
+              "expr": "sum by (state) (system_tcp_connections_total)",
+              "legendFormat": "{{state}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0
+            }
+          }
+        },
+        {
+          "id": 5,
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+          "type": "timeseries",
+          "title": "Network Errors and Drops",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_errs_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "RX Errors: {{device}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_errs_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "TX Errors: {{device}}"
+            },
+            {
+              "expr": "rate(node_network_receive_drop_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "RX Drops: {{device}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_drop_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "TX Drops: {{device}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "pps",
+              "decimals": 2,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          }
+        },
+        {
+          "id": 6,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+          "type": "stat",
+          "title": "Network Interface Status",
+          "targets": [
+            {
+              "expr": "node_network_up{device!~\"lo|veth.*|cni.*|flannel.*\"}",
+              "legendFormat": "{{device}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "value", "value": "0", "text": "DOWN"},
+                {"type": "value", "value": "1", "text": "UP"}
+              ],
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 7,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+          "type": "table",
+          "title": "Interface Statistics",
+          "targets": [
+            {
+              "expr": "node_network_up{device!~\"lo|veth.*|cni.*|flannel.*\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "node_network_mtu_bytes{device!~\"lo|veth.*|cni.*|flannel.*\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            },
+            {
+              "expr": "node_network_info{device!~\"lo|veth.*|cni.*|flannel.*\"}",
+              "format": "table", 
+              "instant": true,
+              "refId": "C"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "merge"
+            },
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "device": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "Value #A": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #B": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #C": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "operstate": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  }
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "job": true,
+                  "instance": true,
+                  "__name__": true
+                },
+                "renameByName": {
+                  "device": "Interface",
+                  "Value #A (lastNotNull)": "Link",
+                  "Value #B (lastNotNull)": "MTU (bytes)",
+                  "operstate (lastNotNull)": "State"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Link"},
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {"type": "value", "value": "0", "text": "DOWN"},
+                      {"type": "value", "value": "1", "text": "UP"}
+                    ]
+                  },
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {"color": "red", "value": null},
+                        {"color": "green", "value": 1}
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "State"},
+                "properties": [
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {"type": "value", "value": "up", "text": "UP", "color": "green"},
+                      {"type": "value", "value": "down", "text": "DOWN", "color": "red"},
+                      {"type": "value", "value": "unknown", "text": "UNKNOWN", "color": "yellow"}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 8,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+          "type": "stat",
+          "title": "Interface Bandwidth",
+          "description": "Note: Speed metrics may not be available for all interfaces",
+          "targets": [
+            {
+              "expr": "node_network_info{device=\"enp110s0\"}",
+              "legendFormat": "Ethernet (enp110s0)"
+            },
+            {
+              "expr": "node_network_info{device=\"wlo1\"}",
+              "legendFormat": "WiFi (wlo1)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "value", "value": "1", "text": "1 Gbps (Connected)"}
+              ],
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 9,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+          "type": "table", 
+          "title": "Process Connection Summary (from network-exporter)",
+          "targets": [
+            {
+              "expr": "sum by (pid, state) (process_network_connections)",
+              "format": "table",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "pid": "Process ID",
+                  "state": "Connection State",
+                  "Value": "Count"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background"
+              }
+            }
+          }
+        }
+      ]
+    }

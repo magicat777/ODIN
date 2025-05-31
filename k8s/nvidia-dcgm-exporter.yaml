@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-dcgm-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: nvidia-dcgm-exporter
+  template:
+    metadata:
+      labels:
+        app: nvidia-dcgm-exporter
+    spec:
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+      - operator: "Exists"
+      containers:
+      - name: nvidia-dcgm-exporter
+        image: nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.1-ubi9
+        env:
+        - name: DCGM_EXPORTER_LISTEN
+          value: ":9400"
+        - name: DCGM_EXPORTER_KUBERNETES
+          value: "true"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        ports:
+        - containerPort: 9400
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: nvidia-install-dir
+          mountPath: /usr/local/nvidia
+          readOnly: true
+        - name: device
+          mountPath: /dev
+        - name: sys
+          mountPath: /sys
+        - name: nvidia-driver
+          mountPath: /usr/lib/x86_64-linux-gnu
+          readOnly: true
+        - name: nvidia-bin
+          mountPath: /usr/bin
+          readOnly: true
+      volumes:
+      - name: nvidia-install-dir
+        hostPath:
+          path: /usr/local/nvidia
+      - name: device
+        hostPath:
+          path: /dev
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: nvidia-driver
+        hostPath:
+          path: /usr/lib/x86_64-linux-gnu
+      - name: nvidia-bin
+        hostPath:
+          path: /usr/bin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nvidia-dcgm-exporter
+  namespace: monitoring
+  labels:
+    app: nvidia-dcgm-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9400"
+spec:
+  selector:
+    app: nvidia-dcgm-exporter
+  ports:
+  - port: 9400
+    targetPort: 9400
+    name: metrics
+  type: ClusterIP

@@ -1,0 +1,172 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-self-dashboard
+  namespace: monitoring
+data:
+  monitoring-health.json: |
+    {
+      "id": null,
+      "title": "Monitoring Stack Health",
+      "tags": ["monitoring", "health", "reliability"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Service Uptime",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "up{job=~\"prometheus|node-exporter|alertmanager|kube-state-metrics\"}",
+              "legendFormat": "{{ job }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [
+                {"type": "value", "value": "0", "text": "DOWN"},
+                {"type": "value", "value": "1", "text": "UP"}
+              ],
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Pod Restart Count (Last 24h)",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"monitoring\"}[24h])) by (pod)",
+              "legendFormat": "{{ pod }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 5}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "Prometheus Query Rate",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "rate(prometheus_http_requests_total{handler=\"/api/v1/query\"}[5m])",
+              "legendFormat": "Query Rate",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+        },
+        {
+          "id": 4,
+          "title": "Prometheus Storage Usage",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "prometheus_tsdb_head_series",
+              "legendFormat": "Active Series",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(prometheus_tsdb_head_samples_appended_total[5m])",
+              "legendFormat": "Sample Rate",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+        },
+        {
+          "id": 5,
+          "title": "Resource Usage by Pod",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"monitoring\",container!=\"\",container!=\"POD\"}[5m])) by (pod) * 100",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true
+                },
+                "renameByName": {
+                  "Value": "CPU %"
+                }
+              }
+            }
+          ],
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+        },
+        {
+          "id": 6,
+          "title": "Alert Firing Status",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "ALERTS{alertstate=\"firing\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                }
+              }
+            }
+          ],
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+        }
+      ]
+    }

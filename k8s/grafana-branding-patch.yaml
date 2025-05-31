@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: inject-custom-css
+        image: busybox
+        command: ['sh', '-c']
+        args:
+        - |
+          # Find the main CSS file and append our custom CSS
+          cd /usr/share/grafana/public/build
+          for css in *.css; do
+            if [[ $css == *"dark"* ]] || [[ $css == *"light"* ]]; then
+              echo "Appending custom CSS to $css"
+              cat /custom/custom-logo.css >> $css
+            fi
+          done
+          
+          # Also create a standalone CSS file
+          cp /custom/custom-logo.css /usr/share/grafana/public/css/
+          
+          # Copy custom JS
+          cp /custom/custom-logo.js /usr/share/grafana/public/build/
+        volumeMounts:
+        - name: grafana-public
+          mountPath: /usr/share/grafana/public
+        - name: custom-branding
+          mountPath: /custom
+      containers:
+      - name: grafana
+        env:
+        - name: GF_FEATURE_TOGGLES_ENABLE
+          value: "customBranding"
+        volumeMounts:
+        - name: grafana-public
+          mountPath: /usr/share/grafana/public
+      volumes:
+      - name: grafana-public
+        emptyDir: {}
+      - name: custom-branding
+        configMap:
+          name: grafana-custom-branding

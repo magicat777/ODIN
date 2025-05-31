@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: claude-code-alert-rules
+  namespace: monitoring
+data:
+  claude-code-alerts.yaml: |
+    groups:
+    - name: claude_code_alerts
+      interval: 30s
+      rules:
+      # Process Health Alerts
+      - alert: ClaudeCodeHighCPU
+        expr: claude_code_process_cpu_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: claude-code
+        annotations:
+          summary: "Claude Code process high CPU usage"
+          description: "Claude Code process {{ $labels.pid }} ({{ $labels.cmd }}) is using {{ $value }}% CPU"
+          
+      - alert: ClaudeCodeHighMemory
+        expr: claude_code_process_memory_mb{type="rss"} > 2048
+        for: 5m
+        labels:
+          severity: warning
+          component: claude-code
+        annotations:
+          summary: "Claude Code process high memory usage"
+          description: "Claude Code process {{ $labels.pid }} ({{ $labels.cmd }}) is using {{ $value }}MB memory"
+          
+      - alert: ClaudeCodeTooManyConnections
+        expr: sum(claude_code_process_connections) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: claude-code
+        annotations:
+          summary: "Too many network connections"
+          description: "Claude Code processes have {{ $value }} total network connections"
+          
+      - alert: ClaudeCodeTooManyFileHandles
+        expr: claude_code_process_handles > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: claude-code
+        annotations:
+          summary: "Too many file handles"
+          description: "Claude Code process {{ $labels.pid }} has {{ $value }} file handles open"
+          
+      # API Usage Alerts
+      - alert: ClaudeCodeHighAPIUsage
+        expr: increase(claude_code_api_requests_total[1h]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: claude-code
+        annotations:
+          summary: "High API usage detected"
+          description: "Claude Code made {{ $value }} API requests in the last hour"
+          
+      - alert: ClaudeCodeHighTokenUsage
+        expr: increase(claude_code_api_tokens_used_total[1h]) > 100000
+        for: 5m
+        labels:
+          severity: warning
+          component: claude-code
+        annotations:
+          summary: "High token usage detected"
+          description: "Claude Code used {{ $value }} tokens in the last hour"
+          
+      - alert: ClaudeCodeHighCost
+        expr: increase(claude_code_api_cost_dollars_total[24h]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: claude-code
+        annotations:
+          summary: "High API cost detected"
+          description: "Claude Code API costs reached ${{ $value }} in the last 24 hours"
+          
+      - alert: ClaudeCodeAPIErrors
+        expr: rate(claude_code_api_requests_total{status!="200"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: claude-code
+        annotations:
+          summary: "Claude Code API errors"
+          description: "Claude Code API is experiencing {{ $value }} errors per second"
+          
+      # Process Stability Alerts
+      - alert: ClaudeCodeProcessRestarted
+        expr: changes(claude_code_process_start_time[10m]) > 0
+        for: 1m
+        labels:
+          severity: info
+          component: claude-code
+        annotations:
+          summary: "Claude Code process restarted"
+          description: "Claude Code process {{ $labels.pid }} ({{ $labels.cmd }}) was restarted"
+          
+      - alert: ClaudeCodeNoProcesses
+        expr: claude_code_process_count == 0
+        for: 5m
+        labels:
+          severity: info
+          component: claude-code
+        annotations:
+          summary: "No Claude Code processes running"
+          description: "No Claude Code processes detected on {{ $labels.instance }}"

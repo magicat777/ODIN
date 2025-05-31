@@ -1,0 +1,383 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: claude-code-exporter-script
+  namespace: monitoring
+data:
+  claude-code-exporter.py: |
+    #!/usr/bin/env python3
+    import os
+    import time
+    import psutil
+    import socket
+    import subprocess
+    import json
+    import re
+    from datetime import datetime
+    from collections import defaultdict
+    from prometheus_client import start_http_server, Gauge, Counter, Histogram, Info
+    
+    # Process metrics
+    claude_process_count = Gauge('claude_code_process_count', 'Number of Claude Code processes')
+    claude_process_cpu_percent = Gauge('claude_code_process_cpu_percent', 'CPU usage percentage', ['pid', 'cmd'])
+    claude_process_memory_mb = Gauge('claude_code_process_memory_mb', 'Memory usage in MB', ['pid', 'cmd', 'type'])
+    claude_process_threads = Gauge('claude_code_process_threads', 'Number of threads', ['pid', 'cmd'])
+    claude_process_handles = Gauge('claude_code_process_handles', 'Number of file handles', ['pid', 'cmd'])
+    claude_process_connections = Gauge('claude_code_process_connections', 'Number of network connections', ['pid', 'cmd', 'state'])
+    claude_process_open_files = Gauge('claude_code_process_open_files', 'Number of open files', ['pid', 'cmd'])
+    claude_process_start_time = Gauge('claude_code_process_start_time', 'Process start time (unix timestamp)', ['pid', 'cmd'])
+    
+    # Port metrics
+    claude_open_ports = Gauge('claude_code_open_ports', 'Open ports by Claude processes', ['pid', 'port', 'type'])
+    
+    # API metrics (these would need to be parsed from logs or config)
+    claude_api_requests_total = Counter('claude_code_api_requests_total', 'Total API requests', ['endpoint', 'status'])
+    claude_api_tokens_used = Counter('claude_code_api_tokens_used_total', 'Total tokens used', ['model', 'type'])
+    claude_api_cost_dollars = Counter('claude_code_api_cost_dollars_total', 'Total API cost in dollars', ['model'])
+    claude_api_response_time = Histogram('claude_code_api_response_time_seconds', 'API response time', ['endpoint'])
+    
+    # System-wide metrics
+    claude_total_cpu_percent = Gauge('claude_code_total_cpu_percent', 'Total CPU usage by all Claude processes')
+    claude_total_memory_mb = Gauge('claude_code_total_memory_mb', 'Total memory usage by all Claude processes')
+    claude_total_connections = Gauge('claude_code_total_connections', 'Total network connections')
+    
+    # Info metrics
+    claude_exporter_info = Info('claude_code_exporter_info', 'Claude Code exporter information')
+    
+    def get_claude_processes():
+        """Find actual Claude Code CLI processes only"""
+        claude_processes = []
+        parent_pids = set()
+        
+        # First pass: find parent claude processes
+        for proc in psutil.process_iter(['pid', 'ppid', 'name', 'cmdline', 'create_time']):
+            try:
+                cmdline = ' '.join(proc.info['cmdline'] or [])
+                pid = proc.info['pid']
+                
+                # Skip empty cmdlines
+                if not cmdline:
+                    continue
+                
+                # Look for the main Claude CLI node process
+                # Pattern: node --no-warnings --enable-source-maps /path/to/.npm-global/bin/claude claude
+                if ('node' in cmdline and 
+                    '.npm-global/bin/claude claude' in cmdline and
+                    '--no-warnings' in cmdline):
+                    claude_processes.append(proc)
+                    parent_pids.add(pid)
+                    print(f"Found main Claude process: PID {pid}, CMD: {cmdline[:80]}...")
+                        
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # Second pass: find child processes of the parent claude processes
+        for proc in psutil.process_iter(['pid', 'ppid', 'name', 'cmdline', 'create_time']):
+            try:
+                ppid = proc.info.get('ppid')
+                if ppid and ppid in parent_pids:
+                    cmdline = ' '.join(proc.info['cmdline'] or [])
+                    # Add child processes like claude-tts
+                    if cmdline:  # Only add if it has a command line
+                        claude_processes.append(proc)
+                        print(f"Found Claude child process: PID {proc.info['pid']}, PPID {ppid}, CMD: {cmdline[:80]}...")
+                        
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+                
+        return claude_processes
+    
+    def get_process_handles(pid):
+        """Get number of file handles for a process"""
+        try:
+            # Linux specific
+            return len(os.listdir(f'/proc/{pid}/fd'))
+        except:
+            return 0
+    
+    def get_process_connections_by_state(proc):
+        """Get network connections grouped by state"""
+        connections_by_state = defaultdict(int)
+        try:
+            for conn in proc.connections(kind='inet'):  # Only count internet connections
+                connections_by_state[conn.status] += 1
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.Error):
+            pass
+        return connections_by_state
+    
+    def get_open_ports(proc):
+        """Get open ports for a process"""
+        open_ports = []
+        try:
+            for conn in proc.connections(kind='inet'):
+                if conn.status == 'LISTEN':
+                    open_ports.append({
+                        'port': conn.laddr.port,
+                        'type': 'tcp' if conn.type == socket.SOCK_STREAM else 'udp'
+                    })
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.Error):
+            pass
+        return open_ports
+    
+    def parse_api_logs():
+        """Parse Claude API usage from logs (placeholder - would need actual log parsing)"""
+        # This is a placeholder - in reality, you'd parse actual Claude Code logs
+        # or read from a configuration file where API usage is tracked
+        
+        # Check common log locations
+        log_locations = [
+            '/var/log/claude-code.log',
+            '/home/*/.claude-code/logs/*.log',
+            '/tmp/claude-*.log'
+        ]
+        
+        api_stats = {
+            'requests': 0,
+            'tokens': 0,
+            'cost': 0.0
+        }
+        
+        # TODO: Implement actual log parsing logic
+        # This would parse logs for API calls, token usage, and calculate costs
+        
+        return api_stats
+    
+    def collect_claude_metrics():
+        """Collect metrics for all Claude processes"""
+        # Clear all metrics first to avoid stale data
+        claude_process_cpu_percent._metrics.clear()
+        claude_process_memory_mb._metrics.clear()
+        claude_process_threads._metrics.clear()
+        claude_process_handles._metrics.clear()
+        claude_process_connections._metrics.clear()
+        claude_process_open_files._metrics.clear()
+        claude_process_start_time._metrics.clear()
+        claude_open_ports._metrics.clear()
+        
+        processes = get_claude_processes()
+        
+        # Update process count
+        claude_process_count.set(len(processes))
+        
+        total_cpu = 0
+        total_memory = 0
+        total_connections = 0
+        
+        for proc in processes:
+            try:
+                pid = proc.pid
+                # Shorten cmdline for label to avoid prometheus label size limits
+                full_cmdline = proc.cmdline()
+                if full_cmdline:
+                    # For node processes, just show "node claude"
+                    if 'node' in full_cmdline[0] and any('.npm-global/bin/claude' in arg for arg in full_cmdline):
+                        cmdline = "node claude"
+                    # For python processes, show the script name
+                    elif 'python' in full_cmdline[0]:
+                        script_name = next((arg for arg in full_cmdline if 'claude' in arg), 'python')
+                        cmdline = f"python {os.path.basename(script_name)}"
+                    else:
+                        cmdline = ' '.join(full_cmdline[:2])
+                else:
+                    cmdline = proc.name()
+                
+                # CPU usage
+                cpu_percent = proc.cpu_percent(interval=0.1)
+                claude_process_cpu_percent.labels(pid=pid, cmd=cmdline).set(cpu_percent)
+                total_cpu += cpu_percent
+                
+                # Memory usage
+                mem_info = proc.memory_info()
+                mem_rss_mb = mem_info.rss / 1024 / 1024
+                mem_vms_mb = mem_info.vms / 1024 / 1024
+                claude_process_memory_mb.labels(pid=pid, cmd=cmdline, type='rss').set(mem_rss_mb)
+                claude_process_memory_mb.labels(pid=pid, cmd=cmdline, type='vms').set(mem_vms_mb)
+                total_memory += mem_rss_mb
+                
+                # Threads
+                num_threads = proc.num_threads()
+                claude_process_threads.labels(pid=pid, cmd=cmdline).set(num_threads)
+                
+                # File handles
+                num_handles = get_process_handles(pid)
+                claude_process_handles.labels(pid=pid, cmd=cmdline).set(num_handles)
+                
+                # Open files
+                try:
+                    num_files = len(proc.open_files())
+                    claude_process_open_files.labels(pid=pid, cmd=cmdline).set(num_files)
+                except:
+                    pass
+                
+                # Network connections by state
+                conn_states = get_process_connections_by_state(proc)
+                for state, count in conn_states.items():
+                    claude_process_connections.labels(pid=pid, cmd=cmdline, state=state).set(count)
+                    total_connections += count
+                
+                # Open ports
+                open_ports = get_open_ports(proc)
+                for port_info in open_ports:
+                    claude_open_ports.labels(
+                        pid=pid, 
+                        port=port_info['port'], 
+                        type=port_info['type']
+                    ).set(1)
+                
+                # Process start time
+                claude_process_start_time.labels(pid=pid, cmd=cmdline).set(proc.create_time())
+                
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # Update totals
+        claude_total_cpu_percent.set(total_cpu)
+        claude_total_memory_mb.set(total_memory)
+        claude_total_connections.set(total_connections)
+        
+        # Collect API metrics (placeholder)
+        api_stats = parse_api_logs()
+        # Update API metrics based on parsed logs
+    
+    def check_claude_cli():
+        """Check if Claude CLI is installed and get version"""
+        try:
+            # Try to find claude in common locations
+            claude_paths = [
+                '/home/*/.npm-global/bin/claude',
+                '/usr/local/bin/claude',
+                '/usr/bin/claude'
+            ]
+            
+            import glob
+            for pattern in claude_paths:
+                for path in glob.glob(pattern):
+                    if os.path.exists(path):
+                        result = subprocess.run([path, '--version'], 
+                                              capture_output=True, text=True, timeout=5)
+                        if result.returncode == 0:
+                            version = result.stdout.strip()
+                            return {'installed': True, 'version': version, 'path': path}
+        except:
+            pass
+        return {'installed': False, 'version': 'unknown', 'path': 'not found'}
+    
+    if __name__ == '__main__':
+        # Start Prometheus metrics server
+        start_http_server(9403)
+        
+        # Check Claude CLI
+        cli_info = check_claude_cli()
+        claude_exporter_info.info({
+            'version': '2.0',
+            'cli_installed': str(cli_info['installed']),
+            'cli_version': cli_info['version'],
+            'cli_path': cli_info['path']
+        })
+        
+        print(f"Claude Code exporter v2.0 started on port 9403")
+        print(f"Claude CLI installed: {cli_info['installed']}")
+        print(f"Claude CLI path: {cli_info['path']}")
+        
+        # Collect metrics every 10 seconds
+        while True:
+            try:
+                print(f"\nCollecting metrics at {datetime.now()}")
+                collect_claude_metrics()
+            except Exception as e:
+                print(f"Error collecting metrics: {e}")
+                import traceback
+                traceback.print_exc()
+            time.sleep(10)
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: claude-code-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: claude-code-exporter
+  template:
+    metadata:
+      labels:
+        app: claude-code-exporter
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: claude-code-exporter
+        image: python:3.10-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install prometheus_client psutil
+          python /scripts/claude-code-exporter.py
+        ports:
+        - containerPort: 9403
+          hostPort: 9403
+          name: metrics
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: logs
+          mountPath: /var/log
+          readOnly: true
+        securityContext:
+          privileged: true
+        env:
+        - name: HOST_PROC
+          value: "/host/proc"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9403
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9403
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: script
+        configMap:
+          name: claude-code-exporter-script
+          defaultMode: 0755
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: logs
+        hostPath:
+          path: /var/log
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: claude-code-exporter
+  namespace: monitoring
+  labels:
+    app: claude-code-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9403"
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9403
+    targetPort: 9403
+  selector:
+    app: claude-code-exporter

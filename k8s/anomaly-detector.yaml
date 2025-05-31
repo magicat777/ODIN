@@ -1,0 +1,469 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: anomaly-detector-script
+  namespace: monitoring
+data:
+  anomaly_detector.py: |
+    #!/usr/bin/env python3
+    import time
+    import numpy as np
+    import pandas as pd
+    from datetime import datetime, timedelta
+    import requests
+    import logging
+    import json
+    import os
+    import pickle
+    from prometheus_client import start_http_server, Gauge, Counter, Histogram
+    from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import StandardScaler
+    import warnings
+    warnings.filterwarnings('ignore')
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger('anomaly-detector')
+    
+    # Prometheus metrics
+    anomaly_score = Gauge('anomaly_score', 'Anomaly score for metric', ['metric_name', 'algorithm'])
+    anomaly_threshold = Gauge('anomaly_threshold', 'Dynamic threshold for metric', ['metric_name', 'type'])
+    model_training_duration = Histogram('anomaly_model_training_duration_seconds', 'Model training duration')
+    model_updates = Counter('anomaly_model_updates_total', 'Total model updates', ['metric_name'])
+    detection_errors = Counter('anomaly_detection_errors_total', 'Total detection errors', ['metric_name'])
+    health_status = Gauge('anomaly_detector_health', 'Health status of anomaly detector')
+    
+    # Configuration
+    PROMETHEUS_URL = os.getenv('PROMETHEUS_URL', 'http://prometheus:9090')
+    MODEL_PATH = '/models'
+    UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', '300'))  # 5 minutes
+    TRAINING_WINDOW = os.getenv('TRAINING_WINDOW', '7d')
+    
+    # Metrics configuration
+    MONITORED_METRICS = [
+        {
+            'name': 'nvidia_gpu_temperature_celsius',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.05,  # Lower = more sensitive
+            'min_samples': 100
+        },
+        {
+            'name': 'node_gpu_power_watts',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.05,
+            'min_samples': 100
+        },
+        {
+            'name': 'node_memory_MemAvailable_bytes',
+            'algorithm': 'statistical',
+            'z_threshold': 3,
+            'min_samples': 50
+        },
+        {
+            'name': 'rate(node_cpu_seconds_total[5m])',
+            'query': 'rate(node_cpu_seconds_total[5m])',
+            'algorithm': 'statistical',
+            'z_threshold': 2.5,
+            'min_samples': 50
+        },
+        {
+            'name': 'rate(node_network_receive_bytes_total[5m])',
+            'query': 'rate(node_network_receive_bytes_total{device="enp110s0"}[5m])',
+            'algorithm': 'isolation_forest',
+            'sensitivity': 0.1,
+            'min_samples': 100
+        },
+        {
+            'name': 'claude_code_api_requests_total',
+            'algorithm': 'statistical',
+            'z_threshold': 3,
+            'min_samples': 30
+        }
+    ]
+    
+    class AnomalyDetector:
+        def __init__(self):
+            self.models = {}
+            self.scalers = {}
+            self.thresholds = {}
+            os.makedirs(MODEL_PATH, exist_ok=True)
+            self.load_models()
+            
+        def load_models(self):
+            """Load saved models from disk"""
+            for metric in MONITORED_METRICS:
+                model_file = os.path.join(MODEL_PATH, f"{metric['name'].replace('/', '_')}.pkl")
+                if os.path.exists(model_file):
+                    try:
+                        with open(model_file, 'rb') as f:
+                            data = pickle.load(f)
+                            self.models[metric['name']] = data['model']
+                            self.scalers[metric['name']] = data['scaler']
+                            self.thresholds[metric['name']] = data.get('thresholds', {})
+                            logger.info(f"Loaded model for {metric['name']}")
+                    except Exception as e:
+                        logger.error(f"Failed to load model for {metric['name']}: {e}")
+                        
+        def save_model(self, metric_name):
+            """Save model to disk"""
+            if metric_name in self.models:
+                model_file = os.path.join(MODEL_PATH, f"{metric_name.replace('/', '_')}.pkl")
+                try:
+                    with open(model_file, 'wb') as f:
+                        pickle.dump({
+                            'model': self.models[metric_name],
+                            'scaler': self.scalers.get(metric_name),
+                            'thresholds': self.thresholds.get(metric_name, {})
+                        }, f)
+                    logger.info(f"Saved model for {metric_name}")
+                except Exception as e:
+                    logger.error(f"Failed to save model for {metric_name}: {e}")
+                    
+        def query_prometheus(self, query, start_time=None, end_time=None, step='60s'):
+            """Query Prometheus for metric data"""
+            if not start_time:
+                end_time = datetime.now()
+                start_time = end_time - timedelta(days=7)
+                
+            params = {
+                'query': query,
+                'start': start_time.timestamp(),
+                'end': end_time.timestamp(),
+                'step': step
+            }
+            
+            try:
+                response = requests.get(f"{PROMETHEUS_URL}/api/v1/query_range", params=params)
+                response.raise_for_status()
+                data = response.json()
+                
+                if data['status'] == 'success' and data['data']['result']:
+                    # Extract time series data
+                    result = data['data']['result'][0]
+                    values = [(float(v[0]), float(v[1])) for v in result['values']]
+                    return pd.DataFrame(values, columns=['timestamp', 'value'])
+                    
+            except Exception as e:
+                logger.error(f"Failed to query Prometheus: {e}")
+                detection_errors.labels(metric_name=query).inc()
+                
+            return pd.DataFrame()
+            
+        def train_isolation_forest(self, metric_config, data):
+            """Train Isolation Forest model"""
+            if len(data) < metric_config['min_samples']:
+                logger.warning(f"Insufficient data for {metric_config['name']}: {len(data)} samples")
+                return None, None
+                
+            # Prepare features
+            X = data[['value']].values
+            
+            # Add time-based features
+            data['hour'] = pd.to_datetime(data['timestamp'], unit='s').dt.hour
+            data['dayofweek'] = pd.to_datetime(data['timestamp'], unit='s').dt.dayofweek
+            X = np.column_stack([X, data['hour'].values, data['dayofweek'].values])
+            
+            # Scale features
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            
+            # Train model
+            model = IsolationForest(
+                contamination=metric_config['sensitivity'],
+                random_state=42,
+                n_estimators=100
+            )
+            
+            with model_training_duration.time():
+                model.fit(X_scaled)
+                
+            model_updates.labels(metric_name=metric_config['name']).inc()
+            
+            return model, scaler
+            
+        def train_statistical_model(self, metric_config, data):
+            """Train statistical anomaly detection model"""
+            if len(data) < metric_config['min_samples']:
+                logger.warning(f"Insufficient data for {metric_config['name']}: {len(data)} samples")
+                return None
+                
+            values = data['value'].values
+            
+            # Calculate statistics
+            mean = np.mean(values)
+            std = np.std(values)
+            
+            # Calculate percentiles for dynamic thresholds
+            thresholds = {
+                'mean': mean,
+                'std': std,
+                'p99': np.percentile(values, 99),
+                'p95': np.percentile(values, 95),
+                'p05': np.percentile(values, 5),
+                'p01': np.percentile(values, 1)
+            }
+            
+            model_updates.labels(metric_name=metric_config['name']).inc()
+            
+            return thresholds
+            
+        def detect_anomalies(self, metric_config):
+            """Detect anomalies for a specific metric"""
+            try:
+                # Query recent data for detection
+                query = metric_config.get('query', metric_config['name'])
+                recent_data = self.query_prometheus(
+                    query,
+                    start_time=datetime.now() - timedelta(minutes=10),
+                    step='30s'
+                )
+                
+                if recent_data.empty or len(recent_data) == 0:
+                    return
+                    
+                current_value = recent_data['value'].iloc[-1]
+                
+                if metric_config['algorithm'] == 'isolation_forest':
+                    if metric_config['name'] in self.models:
+                        model = self.models[metric_config['name']]
+                        scaler = self.scalers[metric_config['name']]
+                        
+                        # Prepare features
+                        hour = pd.to_datetime(recent_data['timestamp'].iloc[-1], unit='s').hour
+                        dayofweek = pd.to_datetime(recent_data['timestamp'].iloc[-1], unit='s').dayofweek
+                        X = np.array([[current_value, hour, dayofweek]])
+                        X_scaled = scaler.transform(X)
+                        
+                        # Get anomaly score (-1 for anomaly, 1 for normal)
+                        score = model.decision_function(X_scaled)[0]
+                        # Convert to 0-100 scale (lower score = more anomalous)
+                        normalized_score = 50 + (score * 50)
+                        normalized_score = max(0, min(100, normalized_score))
+                        
+                        anomaly_score.labels(
+                            metric_name=metric_config['name'],
+                            algorithm='isolation_forest'
+                        ).set(100 - normalized_score)
+                        
+                elif metric_config['algorithm'] == 'statistical':
+                    if metric_config['name'] in self.thresholds:
+                        thresholds = self.thresholds[metric_config['name']]
+                        
+                        # Calculate z-score
+                        z_score = abs((current_value - thresholds['mean']) / (thresholds['std'] + 1e-10))
+                        
+                        # Convert to 0-100 scale
+                        score = min(100, (z_score / metric_config['z_threshold']) * 100)
+                        
+                        anomaly_score.labels(
+                            metric_name=metric_config['name'],
+                            algorithm='statistical'
+                        ).set(score)
+                        
+                        # Set dynamic thresholds
+                        anomaly_threshold.labels(
+                            metric_name=metric_config['name'],
+                            type='upper_bound'
+                        ).set(thresholds['p99'])
+                        
+                        anomaly_threshold.labels(
+                            metric_name=metric_config['name'],
+                            type='lower_bound'
+                        ).set(thresholds['p01'])
+                        
+            except Exception as e:
+                logger.error(f"Error detecting anomalies for {metric_config['name']}: {e}")
+                detection_errors.labels(metric_name=metric_config['name']).inc()
+                
+        def update_models(self):
+            """Update all models with recent training data"""
+            logger.info("Updating anomaly detection models...")
+            
+            for metric_config in MONITORED_METRICS:
+                try:
+                    # Query training data
+                    query = metric_config.get('query', metric_config['name'])
+                    training_data = self.query_prometheus(query)
+                    
+                    if training_data.empty:
+                        logger.warning(f"No training data for {metric_config['name']}")
+                        continue
+                        
+                    if metric_config['algorithm'] == 'isolation_forest':
+                        model, scaler = self.train_isolation_forest(metric_config, training_data)
+                        if model:
+                            self.models[metric_config['name']] = model
+                            self.scalers[metric_config['name']] = scaler
+                            self.save_model(metric_config['name'])
+                            
+                    elif metric_config['algorithm'] == 'statistical':
+                        thresholds = self.train_statistical_model(metric_config, training_data)
+                        if thresholds:
+                            self.thresholds[metric_config['name']] = thresholds
+                            self.save_model(metric_config['name'])
+                            
+                    logger.info(f"Updated model for {metric_config['name']}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to update model for {metric_config['name']}: {e}")
+                    
+        def run(self):
+            """Main detection loop"""
+            # Initial model training
+            self.update_models()
+            
+            last_model_update = time.time()
+            
+            while True:
+                try:
+                    # Detect anomalies for all metrics
+                    for metric_config in MONITORED_METRICS:
+                        self.detect_anomalies(metric_config)
+                        
+                    # Update models periodically (every 6 hours)
+                    if time.time() - last_model_update > 21600:
+                        self.update_models()
+                        last_model_update = time.time()
+                        
+                    # Set health status
+                    health_status.set(1)
+                    
+                    time.sleep(UPDATE_INTERVAL)
+                    
+                except Exception as e:
+                    logger.error(f"Error in main loop: {e}")
+                    health_status.set(0)
+                    time.sleep(60)
+    
+    def main():
+        # Start Prometheus metrics server
+        start_http_server(9405)
+        logger.info("Started metrics server on port 9405")
+        
+        # Start anomaly detector
+        detector = AnomalyDetector()
+        detector.run()
+    
+    if __name__ == '__main__':
+        main()
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: anomaly-detector-requirements
+  namespace: monitoring
+data:
+  requirements.txt: |
+    prometheus-client==0.19.0
+    requests==2.31.0
+    numpy==1.24.3
+    pandas==2.0.3
+    scikit-learn==1.3.0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anomaly-detector
+  namespace: monitoring
+  labels:
+    app: anomaly-detector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: anomaly-detector
+    spec:
+      containers:
+      - name: anomaly-detector
+        image: python:3.11-slim
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          apt-get update && apt-get install -y gcc g++ && \
+          pip install --no-cache-dir -r /requirements/requirements.txt && \
+          python /app/anomaly_detector.py
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus:9090"
+        - name: UPDATE_INTERVAL
+          value: "300"
+        - name: TRAINING_WINDOW
+          value: "7d"
+        ports:
+        - containerPort: 9405
+          name: metrics
+        volumeMounts:
+        - name: script
+          mountPath: /app
+        - name: requirements
+          mountPath: /requirements
+        - name: models
+          mountPath: /models
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9405
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9405
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: script
+        configMap:
+          name: anomaly-detector-script
+          defaultMode: 0755
+      - name: requirements
+        configMap:
+          name: anomaly-detector-requirements
+      - name: models
+        persistentVolumeClaim:
+          claimName: anomaly-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: anomaly-detector
+  namespace: monitoring
+  labels:
+    app: anomaly-detector
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9405"
+spec:
+  ports:
+  - port: 9405
+    targetPort: 9405
+    name: metrics
+  selector:
+    app: anomaly-detector
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: anomaly-models-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi

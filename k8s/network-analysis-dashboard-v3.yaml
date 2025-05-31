@@ -1,0 +1,933 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-analysis-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  network-analysis-dashboard.json: |
+    {
+      "uid": "network-analysis",
+      "title": "Network Traffic Analysis - Primary Interface (enp110s0)",
+      "tags": ["network", "traffic", "razerblade"],
+      "timezone": "browser",
+      "schemaVersion": 27,
+      "version": 3,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+          "type": "stat",
+          "title": "Network Health Score",
+          "description": "Overall network health based on errors and retransmissions",
+          "targets": [
+            {
+              "expr": "100 - (100 * (sum(rate(node_network_receive_errs_total[5m])) + sum(rate(node_network_transmit_errs_total[5m])) + sum(rate(node_netstat_Tcp_RetransSegs[5m]))) / (sum(rate(node_network_receive_packets_total[5m])) + sum(rate(node_network_transmit_packets_total[5m]))))",
+              "legendFormat": "Health %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 2,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "orange", "value": 95},
+                  {"color": "yellow", "value": 98},
+                  {"color": "green", "value": 99.5}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+          "type": "stat",
+          "title": "TCP Retransmission Rate",
+          "targets": [
+            {
+              "expr": "100 * sum(rate(node_netstat_Tcp_RetransSegs[5m])) / sum(rate(node_netstat_Tcp_OutSegs[5m]))",
+              "legendFormat": "Retrans %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 3,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.1},
+                  {"color": "orange", "value": 1},
+                  {"color": "red", "value": 5}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+          "type": "stat",
+          "title": "Active TCP Connections",
+          "targets": [
+            {
+              "expr": "node_netstat_Tcp_CurrEstab",
+              "legendFormat": "Established"
+            },
+            {
+              "expr": "node_sockstat_TCP_tw",
+              "legendFormat": "TIME_WAIT"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "palette-classic"}
+            }
+          }
+        },
+        {
+          "id": 4,
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+          "type": "stat",
+          "title": "Packet Drops",
+          "description": "Total packet drops across all interfaces",
+          "targets": [
+            {
+              "expr": "sum(rate(node_network_receive_drop_total{device!=\"lo\"}[5m]))",
+              "legendFormat": "RX Drops/s"
+            },
+            {
+              "expr": "sum(rate(node_network_transmit_drop_total{device!=\"lo\"}[5m]))",
+              "legendFormat": "TX Drops/s"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "pps",
+              "decimals": 3,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 10}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+          "type": "timeseries",
+          "title": "Network Interface Traffic",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{device=\"enp110s0\"}[5m])",
+              "legendFormat": "RX: {{device}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total{device=\"enp110s0\"}[5m]) * -1",
+              "legendFormat": "TX: {{device}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "binBps",
+              "decimals": 2,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          }
+        },
+        {
+          "id": 6,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+          "type": "timeseries",
+          "title": "TCP Retransmissions & Timeouts",
+          "targets": [
+            {
+              "expr": "rate(node_netstat_Tcp_RetransSegs[5m])",
+              "legendFormat": "TCP Retrans/s"
+            },
+            {
+              "expr": "rate(node_netstat_TcpExt_TCPSynRetrans[5m])",
+              "legendFormat": "SYN Retrans/s"
+            },
+            {
+              "expr": "rate(node_netstat_TcpExt_TCPTimeouts[5m])",
+              "legendFormat": "TCP Timeouts/s"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "decimals": 2,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          }
+        },
+        {
+          "id": 7,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+          "type": "timeseries",
+          "title": "Network Errors & Drops (milli-packets/s)",
+          "description": "Shows errors and drops at millisecond precision",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_errs_total{device=\"enp110s0\"}[5m]) * 1000",
+              "legendFormat": "RX Errors: {{device}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_errs_total{device=\"enp110s0\"}[5m]) * 1000",
+              "legendFormat": "TX Errors: {{device}}"
+            },
+            {
+              "expr": "rate(node_network_receive_drop_total{device=\"enp110s0\"}[5m]) * 1000",
+              "legendFormat": "RX Drops: {{device}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_drop_total{device=\"enp110s0\"}[5m]) * 1000",
+              "legendFormat": "TX Drops: {{device}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 2,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "showPoints": "auto",
+                "spanNulls": true,
+                "drawStyle": "line",
+                "pointSize": 4,
+                "stacking": {
+                  "mode": "none"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byRegexp", "options": ".*Drops.*"},
+                "properties": [
+                  {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+                ]
+              },
+              {
+                "matcher": {"id": "byRegexp", "options": ".*Errors.*"},
+                "properties": [
+                  {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 8,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+          "type": "timeseries",
+          "title": "Drop Rate Percentage",
+          "description": "Packet drops as percentage of total packets",
+          "targets": [
+            {
+              "expr": "100 * rate(node_network_receive_drop_total{device=\"enp110s0\"}[5m]) / rate(node_network_receive_packets_total{device=\"enp110s0\"}[5m])",
+              "legendFormat": "RX Drop %"
+            },
+            {
+              "expr": "100 * rate(node_network_transmit_drop_total{device=\"enp110s0\"}[5m]) / rate(node_network_transmit_packets_total{device=\"enp110s0\"}[5m])",
+              "legendFormat": "TX Drop %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 4,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.01},
+                  {"color": "red", "value": 0.1}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 9,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+          "type": "timeseries",
+          "title": "Socket & Connection Stats",
+          "targets": [
+            {
+              "expr": "node_sockstat_TCP_inuse",
+              "legendFormat": "TCP In Use"
+            },
+            {
+              "expr": "node_sockstat_TCP_tw",
+              "legendFormat": "TCP TIME_WAIT"
+            },
+            {
+              "expr": "node_sockstat_TCP_orphan",
+              "legendFormat": "TCP Orphaned"
+            },
+            {
+              "expr": "node_sockstat_UDP_inuse",
+              "legendFormat": "UDP In Use"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          }
+        },
+        {
+          "id": 10,
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 28},
+          "type": "stat",
+          "title": "TCP Connection States",
+          "description": "System-wide TCP connection states",
+          "targets": [
+            {
+              "expr": "node_netstat_Tcp_CurrEstab",
+              "legendFormat": "Established"
+            },
+            {
+              "expr": "node_sockstat_TCP_tw",
+              "legendFormat": "TIME_WAIT"
+            },
+            {
+              "expr": "node_sockstat_TCP_orphan",
+              "legendFormat": "Orphaned"
+            },
+            {
+              "expr": "node_sockstat_TCP_inuse - node_netstat_Tcp_CurrEstab",
+              "legendFormat": "Other States"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "palette-classic"}
+            }
+          },
+          "options": {
+            "orientation": "horizontal",
+            "textMode": "auto",
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto"
+          }
+        },
+        {
+          "id": 10,
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 20},
+          "type": "piechart",
+          "title": "Buffer Errors",
+          "targets": [
+            {
+              "expr": "sum(increase(node_netstat_Udp_RcvbufErrors[1h]))",
+              "legendFormat": "UDP RX Buffer"
+            },
+            {
+              "expr": "sum(increase(node_netstat_Udp_SndbufErrors[1h]))",
+              "legendFormat": "UDP TX Buffer"
+            },
+            {
+              "expr": "sum(increase(node_network_receive_fifo_total{device=\"enp110s0\"}[1h]))",
+              "legendFormat": "RX FIFO"
+            },
+            {
+              "expr": "sum(increase(node_network_transmit_fifo_total{device=\"enp110s0\"}[1h]))",
+              "legendFormat": "TX FIFO"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0
+            }
+          }
+        },
+        {
+          "id": 11,
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 20},
+          "type": "stat",
+          "title": "TCP Listen Queue Health",
+          "targets": [
+            {
+              "expr": "increase(node_netstat_TcpExt_ListenDrops[1h])",
+              "legendFormat": "Listen Drops (1h)"
+            },
+            {
+              "expr": "increase(node_netstat_TcpExt_ListenOverflows[1h])",
+              "legendFormat": "Listen Overflows (1h)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 10}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 12,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+          "type": "table",
+          "title": "Interface Statistics",
+          "targets": [
+            {
+              "expr": "node_network_up{device=\"enp110s0\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "node_network_mtu_bytes{device=\"enp110s0\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            },
+            {
+              "expr": "increase(node_network_carrier_changes_total{device=\"enp110s0\"}[1h])",
+              "format": "table", 
+              "instant": true,
+              "refId": "C"
+            },
+            {
+              "expr": "sum by (device) (rate(node_network_receive_packets_total{device=\"enp110s0\"}[5m]))",
+              "format": "table",
+              "instant": true,
+              "refId": "D"
+            },
+            {
+              "expr": "sum by (device) (rate(node_network_transmit_packets_total{device=\"enp110s0\"}[5m]))",
+              "format": "table",
+              "instant": true,
+              "refId": "E"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "merge"
+            },
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "device": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "Value #A": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #B": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #C": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #D": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #E": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  }
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "job": true,
+                  "instance": true,
+                  "__name__": true
+                },
+                "renameByName": {
+                  "device": "Interface",
+                  "Value #A (lastNotNull)": "Link",
+                  "Value #B (lastNotNull)": "MTU",
+                  "Value #C (lastNotNull)": "Carrier Changes (1h)",
+                  "Value #D (lastNotNull)": "RX pps",
+                  "Value #E (lastNotNull)": "TX pps"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Link"},
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {"type": "value", "value": "0", "text": "DOWN"},
+                      {"type": "value", "value": "1", "text": "UP"}
+                    ]
+                  },
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {"color": "red", "value": null},
+                        {"color": "green", "value": 1}
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "RX pps"},
+                "properties": [
+                  {"id": "unit", "value": "pps"},
+                  {"id": "decimals", "value": 0}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "TX pps"},
+                "properties": [
+                  {"id": "unit", "value": "pps"},
+                  {"id": "decimals", "value": 0}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Carrier Changes (1h)"},
+                "properties": [
+                  {"id": "color", "value": {"mode": "thresholds"}},
+                  {"id": "thresholds", "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "yellow", "value": 1},
+                      {"color": "red", "value": 5}
+                    ]
+                  }}
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 13,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+          "type": "timeseries",
+          "title": "Connection Tracking",
+          "targets": [
+            {
+              "expr": "node_nf_conntrack_entries",
+              "legendFormat": "Active Connections"
+            },
+            {
+              "expr": "node_nf_conntrack_entries_limit",
+              "legendFormat": "Connection Limit"
+            },
+            {
+              "expr": "100 * node_nf_conntrack_entries / node_nf_conntrack_entries_limit",
+              "legendFormat": "Utilization %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Utilization %"},
+                "properties": [
+                  {"id": "unit", "value": "percent"},
+                  {"id": "custom.axisPlacement", "value": "right"}
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 14,
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 36},
+          "type": "table",
+          "title": "All Interface Drop Statistics",
+          "description": "Shows packet drops across all network interfaces",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_drop_total[5m]) > 0 or rate(node_network_transmit_drop_total[5m]) > 0",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "job": true,
+                  "instance": true,
+                  "__name__": true
+                },
+                "renameByName": {
+                  "device": "Interface",
+                  "Value": "Drops/s"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "pps",
+              "decimals": 3,
+              "custom": {
+                "align": "auto",
+                "displayMode": "gradient-gauge"
+              },
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.1},
+                  {"color": "red", "value": 1}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 15,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 44},
+          "type": "timeseries",
+          "title": "TCP Congestion & Performance",
+          "description": "TCP performance and congestion indicators",
+          "targets": [
+            {
+              "expr": "rate(node_netstat_Tcp_RetransSegs[5m])",
+              "legendFormat": "Total Retransmits/s"
+            },
+            {
+              "expr": "rate(node_netstat_TcpExt_TCPSynRetrans[5m])",
+              "legendFormat": "SYN Retransmits/s"
+            },
+            {
+              "expr": "rate(node_netstat_TcpExt_TCPTimeouts[5m])",
+              "legendFormat": "TCP Timeouts/s"
+            },
+            {
+              "expr": "rate(node_netstat_Tcp_InErrs[5m])",
+              "legendFormat": "TCP In Errors/s"
+            },
+            {
+              "expr": "rate(node_netstat_Tcp_OutRsts[5m])",
+              "legendFormat": "TCP Resets Sent/s"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "decimals": 3,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          }
+        },
+        {
+          "id": 16,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 44},
+          "type": "timeseries",
+          "title": "Link Quality Indicators",
+          "description": "Network link stability and quality metrics",
+          "targets": [
+            {
+              "expr": "increase(node_network_carrier_changes_total{device=\"enp110s0\"}[5m])",
+              "legendFormat": "Carrier Changes (5m)"
+            },
+            {
+              "expr": "rate(node_network_receive_frame_total{device=\"enp110s0\"}[5m]) * 1000",
+              "legendFormat": "Frame Errors (milli/s)"
+            },
+            {
+              "expr": "rate(node_network_receive_fifo_total{device=\"enp110s0\"}[5m]) * 1000",
+              "legendFormat": "RX FIFO Errors (milli/s)"
+            },
+            {
+              "expr": "rate(node_network_transmit_fifo_total{device=\"enp110s0\"}[5m]) * 1000",
+              "legendFormat": "TX FIFO Errors (milli/s)"
+            },
+            {
+              "expr": "rate(node_network_transmit_colls_total{device=\"enp110s0\"}[5m]) * 1000",
+              "legendFormat": "Collisions (milli/s)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 3,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "auto",
+                "spanNulls": true,
+                "drawStyle": "bars"
+              },
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.001},
+                  {"color": "red", "value": 0.01}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 17,
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 52},
+          "type": "timeseries", 
+          "title": "DNS Performance Monitoring",
+          "description": "DNS query performance and reliability (requires DNS instrumentation)",
+          "targets": [
+            {
+              "expr": "rate(node_netstat_Udp_OutDatagrams[5m])",
+              "legendFormat": "UDP Out (includes DNS)"
+            },
+            {
+              "expr": "rate(node_netstat_Udp_InDatagrams[5m])",
+              "legendFormat": "UDP In (includes DNS)"
+            },
+            {
+              "expr": "rate(node_netstat_Udp_InErrors[5m])",
+              "legendFormat": "UDP Errors"
+            },
+            {
+              "expr": "rate(node_netstat_Udp_NoPorts[5m])",
+              "legendFormat": "UDP No Ports"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "pps",
+              "decimals": 2,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": ["mean", "max"]
+            }
+          }
+        },
+        {
+          "id": 18,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 60},
+          "type": "stat",
+          "title": "TCP Listen Queue Health",
+          "description": "TCP listen queue drops and overflows",
+          "targets": [
+            {
+              "expr": "increase(node_netstat_TcpExt_ListenDrops[1h])",
+              "legendFormat": "Listen Drops (1h)"
+            },
+            {
+              "expr": "increase(node_netstat_TcpExt_ListenOverflows[1h])",
+              "legendFormat": "Listen Overflows (1h)"
+            },
+            {
+              "expr": "increase(node_netstat_TcpExt_SyncookiesSent[1h])",
+              "legendFormat": "SYN Cookies Sent (1h)"
+            },
+            {
+              "expr": "increase(node_netstat_TcpExt_SyncookiesRecv[1h])",
+              "legendFormat": "SYN Cookies Recv (1h)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 10},
+                  {"color": "orange", "value": 50},
+                  {"color": "red", "value": 100}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 19,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 60},
+          "type": "gauge",
+          "title": "Link Quality Score",
+          "description": "Overall link quality based on error rates",
+          "targets": [
+            {
+              "expr": "(node_network_up{device=\"enp110s0\"} == 1) * 100 - clamp_max((increase(node_network_receive_errs_total{device=\"enp110s0\"}[5m]) + increase(node_network_transmit_errs_total{device=\"enp110s0\"}[5m]) + increase(node_network_receive_drop_total{device=\"enp110s0\"}[5m]) + increase(node_network_transmit_drop_total{device=\"enp110s0\"}[5m])) * 0.1, 5)",
+              "legendFormat": "Quality %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 4,
+              "min": 95,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": 95},
+                  {"color": "orange", "value": 99},
+                  {"color": "yellow", "value": 99.9},
+                  {"color": "green", "value": 99.99}
+                ]
+              }
+            }
+          },
+          "options": {
+            "orientation": "horizontal",
+            "showThresholdLabels": true,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "id": 20,
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 68},
+          "type": "timeseries",
+          "title": "TCP Connection Efficiency",
+          "description": "TCP connection establishment and efficiency metrics",
+          "targets": [
+            {
+              "expr": "rate(node_netstat_Tcp_ActiveOpens[5m])",
+              "legendFormat": "Active Opens/s"
+            },
+            {
+              "expr": "rate(node_netstat_Tcp_PassiveOpens[5m])",
+              "legendFormat": "Passive Opens/s"
+            },
+            {
+              "expr": "rate(node_netstat_Tcp_AttemptFails[5m])",
+              "legendFormat": "Connection Failures/s"
+            },
+            {
+              "expr": "rate(node_netstat_Tcp_EstabResets[5m])",
+              "legendFormat": "Established Resets/s"
+            },
+            {
+              "expr": "100 * rate(node_netstat_Tcp_RetransSegs[5m]) / rate(node_netstat_Tcp_OutSegs[5m])",
+              "legendFormat": "Retransmission Rate %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "decimals": 3,
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "auto",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }

@@ -1,0 +1,465 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - services
+  - endpoints
+  - pods
+  - configmaps
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+---
+# ConfigMap to manage dynamic rule file discovery
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rule-discovery
+  namespace: monitoring
+data:
+  update-rules.sh: |
+    #!/bin/bash
+    # Auto-discovery script for alert rule ConfigMaps
+    
+    echo "🔍 Discovering alert rule ConfigMaps..."
+    
+    # Find all ConfigMaps with alert/rules in the name
+    RULE_CONFIGMAPS=$(kubectl get configmaps -n monitoring --no-headers | grep -E "(alert|rules)" | grep -v "prometheus-config" | awk '{print $1}')
+    
+    echo "📋 Found rule ConfigMaps:"
+    echo "$RULE_CONFIGMAPS"
+    
+    # Build rule_files section
+    RULE_FILES=""
+    for cm in $RULE_CONFIGMAPS; do
+        # Map ConfigMap name to directory structure
+        case $cm in
+            *gpu*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/gpu/*.yaml\"\n" ;;
+            *power*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/power-exporter/*.yaml\"\n" ;;
+            *claude*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/claude-code/*.yaml\"\n" ;;
+            *k3s*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/k3s/*.yaml\"\n" ;;
+            *odin*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/odin-stack/*.yaml\"\n" ;;
+            *anomaly*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/anomaly/*.yaml\"\n" ;;
+            *service-endpoint*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/service-endpoint/*.yml\"\n" ;;
+            *sli-slo*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/sli-slo/*.yml\"\n" ;;
+            *tcp-network*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/tcp-network/*.yaml\"\n" ;;
+            *grafana-alert*) RULE_FILES="$RULE_FILES  - \"/etc/prometheus/rules/grafana/*.yaml\"\n" ;;
+        esac
+    done
+    
+    echo "✅ Dynamic rule file configuration ready"
+    echo -e "$RULE_FILES"
+---
+# Enhanced Prometheus ConfigMap with auto-discovery support  
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config-resilient
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'odin-monitoring'
+        environment: 'production'
+    
+    # AlertManager configuration with failover
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ['alertmanager:9093']
+          timeout: 10s
+          api_version: v2
+    
+    # Auto-discovered rule files  
+    rule_files:
+      - "/etc/prometheus/rules/gpu/*.yaml"
+      - "/etc/prometheus/rules/power-exporter/*.yaml" 
+      - "/etc/prometheus/rules/claude-code/*.yaml"
+      - "/etc/prometheus/rules/k3s/*.yaml"
+      - "/etc/prometheus/rules/odin-stack/*.yaml"
+      - "/etc/prometheus/rules/anomaly/*.yaml"
+      - "/etc/prometheus/rules/service-endpoint/*.yml"
+      - "/etc/prometheus/rules/sli-slo/*.yml"
+      - "/etc/prometheus/rules/tcp-network/*.yaml"
+      - "/etc/prometheus/rules/grafana/*.yaml"
+      # Future rule files will be auto-added here
+    
+    scrape_configs:
+    - job_name: 'prometheus'
+      static_configs:
+      - targets: ['localhost:9090']
+      scrape_interval: 30s
+      
+    - job_name: 'kubernetes-service-discovery'
+      kubernetes_sd_configs:
+      - role: service
+        namespaces:
+          names: ['monitoring']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_service_annotation_prometheus_io_port]
+        action: replace
+        target_label: __address__
+        regex: (.+);(.+);(.+)
+        replacement: $2.$1.svc.cluster.local:$3
+      - source_labels: [__meta_kubernetes_service_name]
+        target_label: kubernetes_service_name
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: kubernetes_namespace
+      scrape_interval: 30s
+      scrape_timeout: 10s
+    
+    # Static configs for reliable core services
+    - job_name: 'node-exporter'
+      static_configs:
+      - targets: ['192.168.1.154:9100']
+      scrape_interval: 15s
+      
+    - job_name: 'cadvisor'
+      static_configs:
+      - targets: ['cadvisor:8080']
+      scrape_interval: 30s
+      
+    - job_name: 'alertmanager'
+      static_configs:
+      - targets: ['alertmanager:9093']
+      scrape_interval: 30s
+      
+    - job_name: 'grafana'
+      static_configs:
+      - targets: ['grafana:3000']
+      scrape_interval: 60s
+      
+    - job_name: 'kube-state-metrics'
+      static_configs:
+      - targets: ['kube-state-metrics:8080']
+      scrape_interval: 30s
+      
+    - job_name: 'process-exporter'
+      static_configs:
+      - targets: ['process-exporter:9256']
+      scrape_interval: 15s
+      
+    - job_name: 'razer-exporter'
+      static_configs:
+      - targets: ['razer-exporter:9401']
+      scrape_interval: 30s
+      
+    - job_name: 'power-exporter'
+      static_configs:
+      - targets: ['192.168.1.154:9836']
+      scrape_interval: 15s
+      
+    - job_name: 'claude-code-exporter'
+      static_configs:
+      - targets: ['claude-code-exporter:9403']
+      scrape_interval: 30s
+      
+    - job_name: 'claude-token-collector'
+      static_configs:
+      - targets: ['claude-token-collector:9404']
+      scrape_interval: 60s
+      
+    - job_name: 'anomaly-detector'
+      static_configs:
+      - targets: ['anomaly-detector-v2:9405']
+      scrape_interval: 60s
+      
+    - job_name: 'anomaly-detector-v3'
+      static_configs:
+      - targets: ['anomaly-detector-v3:9405']
+      scrape_interval: 60s
+      
+    - job_name: 'loki'
+      static_configs:
+      - targets: ['loki:3100']
+      scrape_interval: 60s
+      
+    - job_name: 'promtail'
+      static_configs:
+      - targets: ['promtail:9080']
+      scrape_interval: 60s
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: local-storage
+---
+# Resilient Prometheus Deployment with enhanced monitoring
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-resilient
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: server
+    version: resilient
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: prometheus
+      component: server
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        component: server
+        version: resilient
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      initContainers:
+      - name: rule-discovery
+        image: bitnami/kubectl:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            echo "🔍 Discovering alert rule ConfigMaps..."
+            kubectl get configmaps -n monitoring --no-headers | grep -E "(alert|rules)" | grep -v "prometheus-config" | awk '{print $1}'
+            echo "✅ Rule discovery complete"
+        securityContext:
+          runAsUser: 65534
+          runAsGroup: 65534
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.40.0
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus/'
+          - '--web.enable-lifecycle'
+          - '--storage.tsdb.retention.time=90d'
+          - '--storage.tsdb.retention.size=40GB'
+          - '--storage.tsdb.wal-compression'
+          - '--web.enable-admin-api'
+          - '--web.external-url=http://localhost:31493'
+          - '--web.route-prefix=/'
+          - '--storage.tsdb.no-lockfile'
+          - '--query.max-concurrency=50'
+          - '--query.timeout=2m'
+          - '--log.level=info'
+        ports:
+        - name: web
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+          readOnly: true
+        - name: gpu-alert-rules
+          mountPath: /etc/prometheus/rules/gpu
+          readOnly: true
+        - name: power-exporter-alert-rules
+          mountPath: /etc/prometheus/rules/power-exporter
+          readOnly: true
+        - name: claude-code-alert-rules
+          mountPath: /etc/prometheus/rules/claude-code
+          readOnly: true
+        - name: k3s-alert-rules
+          mountPath: /etc/prometheus/rules/k3s
+          readOnly: true
+        - name: odin-stack-alert-rules
+          mountPath: /etc/prometheus/rules/odin-stack
+          readOnly: true
+        - name: anomaly-alert-rules
+          mountPath: /etc/prometheus/rules/anomaly
+          readOnly: true
+        - name: service-endpoint-alerts
+          mountPath: /etc/prometheus/rules/service-endpoint
+          readOnly: true
+        - name: sli-slo-rules
+          mountPath: /etc/prometheus/rules/sli-slo
+          readOnly: true
+        - name: tcp-network-alerts
+          mountPath: /etc/prometheus/rules/tcp-network
+          readOnly: true
+        - name: grafana-alert-rules
+          mountPath: /etc/prometheus/rules/grafana
+          readOnly: true
+        - name: storage
+          mountPath: /prometheus
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 4
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+      terminationGracePeriodSeconds: 300
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config-resilient
+          defaultMode: 420
+      - name: gpu-alert-rules
+        configMap:
+          name: gpu-alert-rules
+          optional: true
+      - name: power-exporter-alert-rules
+        configMap:
+          name: power-exporter-alert-rules
+          optional: true
+      - name: claude-code-alert-rules
+        configMap:
+          name: claude-code-alert-rules
+          optional: true
+      - name: k3s-alert-rules
+        configMap:
+          name: k3s-alert-rules
+          optional: true
+      - name: odin-stack-alert-rules
+        configMap:
+          name: odin-stack-alert-rules
+          optional: true
+      - name: anomaly-alert-rules
+        configMap:
+          name: anomaly-alert-rules
+          optional: true
+      - name: service-endpoint-alerts
+        configMap:
+          name: service-endpoint-alerts
+          optional: true
+      - name: sli-slo-rules
+        configMap:
+          name: sli-slo-rules
+          optional: true
+      - name: tcp-network-alerts
+        configMap:
+          name: tcp-network-alerts
+          optional: true
+      - name: grafana-alert-rules
+        configMap:
+          name: grafana-alert-rules
+          optional: true
+      - name: storage
+        persistentVolumeClaim:
+          claimName: prometheus-pvc
+---
+# Headless service for resilient deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-headless
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: server
+spec:
+  clusterIP: None
+  selector:
+    app: prometheus
+    component: server
+  ports:
+  - name: web
+    port: 9090
+    targetPort: 9090
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+  labels:
+    app: prometheus
+    component: server
+spec:
+  selector:
+    app: prometheus
+    component: server
+  ports:
+  - name: web
+    port: 9090
+    targetPort: 9090
+    nodePort: 31493
+  type: NodePort

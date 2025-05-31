@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: monitoring
+data:
+  grafana.ini: |
+    [server]
+    domain = odin.local
+    root_url = http://odin.local:31494/
+
+    [branding]
+    app_title = ODIN - Omnipresent Diagnostics and Intelligence Network
+    app_subtitle = System Monitoring Dashboard
+    welcome_banner_title = Welcome to ODIN
+    welcome_banner_text = Omnipresent Diagnostics and Intelligence Network
+
+    [theme]
+    default_theme = dark
+
+    [users]
+    default_theme = dark
+
+    [ui]
+    app_title = ODIN Monitoring
+    
+    [auth.anonymous]
+    enabled = false
+
+    [security]
+    admin_user = admin
+    admin_password = admin
+    cookie_secure = false
+    
+    [dashboards]
+    default_home_dashboard_path = /d/system-overview/odin-system-overview
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-logo
+  namespace: monitoring
+  labels:
+    grafana_logo: "odin"
+data:
+  # ODIN logo scaled up by 200% (3x original size)
+  logo.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" width="360" height="180" viewBox="0 0 360 180">
+      <defs>
+        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#00ff88;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#0099ff;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      
+      <!-- ODIN text with gradient - scaled up -->
+      <text x="180" y="75" font-family="Arial, sans-serif" font-size="60" font-weight="bold" 
+            text-anchor="middle" fill="url(#grad1)">ODIN</text>
+      
+      <!-- Subtitle - scaled up -->
+      <text x="180" y="120" font-family="Arial, sans-serif" font-size="24" 
+            text-anchor="middle" fill="#999">Omnipresent Diagnostics</text>
+      <text x="180" y="150" font-family="Arial, sans-serif" font-size="24" 
+            text-anchor="middle" fill="#999">Intelligence Network</text>
+      
+      <!-- Decorative elements - scaled up -->
+      <circle cx="45" cy="45" r="9" fill="#00ff88" opacity="0.8"/>
+      <circle cx="315" cy="45" r="9" fill="#0099ff" opacity="0.8"/>
+      <circle cx="45" cy="135" r="6" fill="#00ff88" opacity="0.6"/>
+      <circle cx="315" cy="135" r="6" fill="#0099ff" opacity="0.6"/>
+      
+      <!-- Connection lines - scaled up -->
+      <line x1="54" y1="45" x2="306" y2="45" stroke="#333" stroke-width="3" opacity="0.5"/>
+      <line x1="51" y1="135" x2="309" y2="135" stroke="#333" stroke-width="3" opacity="0.5"/>
+    </svg>
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-favicon
+  namespace: monitoring
+data:
+  # Simple favicon as SVG
+  favicon.ico: |
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+      <rect width="32" height="32" fill="#1a1a1a"/>
+      <text x="16" y="22" font-family="Arial" font-size="14" font-weight="bold" 
+            text-anchor="middle" fill="#00ff88">O</text>
+      <circle cx="8" cy="8" r="2" fill="#00ff88"/>
+      <circle cx="24" cy="8" r="2" fill="#0099ff"/>
+      <circle cx="8" cy="24" r="1" fill="#00ff88" opacity="0.7"/>
+      <circle cx="24" cy="24" r="1" fill="#0099ff" opacity="0.7"/>
+    </svg>

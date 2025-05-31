@@ -1,0 +1,338 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-analysis-dashboard
+  namespace: monitoring
+data:
+  network-analysis.json: |
+    {
+      "id": null,
+      "uid": "network-analysis",
+      "title": "Network Traffic Analysis",
+      "tags": ["network", "process", "traffic"],
+      "timezone": "browser",
+      "schemaVersion": 30,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "type": "table",
+            "title": "Top Network Consumers (Received)",
+            "targets": [
+              {
+                "expr": "topk(10, rate(process_network_receive_bytes_total[5m]))",
+                "format": "table",
+                "instant": true,
+                "legendFormat": "{{process}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "binBps",
+                "decimals": 2,
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "gradient-gauge"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "process"},
+                  "properties": [
+                    {"id": "displayName", "value": "Process"},
+                    {"id": "custom.width", "value": 200}
+                  ]
+                },
+                {
+                  "matcher": {"id": "byName", "options": "Value"},
+                  "properties": [
+                    {"id": "displayName", "value": "RX Rate"}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "type": "table",
+            "title": "Top Network Consumers (Transmitted)",
+            "targets": [
+              {
+                "expr": "topk(10, rate(process_network_transmit_bytes_total[5m]))",
+                "format": "table",
+                "instant": true,
+                "legendFormat": "{{process}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "binBps",
+                "decimals": 2,
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "gradient-gauge"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "process"},
+                  "properties": [
+                    {"id": "displayName", "value": "Process"},
+                    {"id": "custom.width", "value": 200}
+                  ]
+                },
+                {
+                  "matcher": {"id": "byName", "options": "Value"},
+                  "properties": [
+                    {"id": "displayName", "value": "TX Rate"}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+            "type": "timeseries",
+            "title": "Network Traffic by Process",
+            "targets": [
+              {
+                "expr": "topk(5, rate(process_network_receive_bytes_total[5m]))",
+                "legendFormat": "RX: {{process}}"
+              },
+              {
+                "expr": "topk(5, rate(process_network_transmit_bytes_total[5m])) * -1",
+                "legendFormat": "TX: {{process}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "binBps",
+                "decimals": 2,
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never",
+                  "spanNulls": true,
+                  "stacking": {"mode": "none"}
+                }
+              }
+            },
+            "options": {
+              "tooltip": {"mode": "multi"},
+              "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}
+            }
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+            "type": "piechart",
+            "title": "Network Connections by State",
+            "targets": [
+              {
+                "expr": "sum by (state) (process_network_connections)",
+                "legendFormat": "{{state}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0
+              }
+            },
+            "options": {
+              "displayLabels": ["name", "value"],
+              "legendDisplayMode": "table",
+              "legendPlacement": "right",
+              "legendValues": ["value", "percent"],
+              "pieType": "donut"
+            }
+          },
+          {
+            "id": 5,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+            "type": "table",
+            "title": "Processes with Most Connections",
+            "targets": [
+              {
+                "expr": "topk(10, sum by (process) (process_network_connections))",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0,
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "gradient-gauge"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "process"},
+                  "properties": [
+                    {"id": "displayName", "value": "Process"},
+                    {"id": "custom.width", "value": 200}
+                  ]
+                },
+                {
+                  "matcher": {"id": "byName", "options": "Value"},
+                  "properties": [
+                    {"id": "displayName", "value": "Connections"}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 6,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+            "type": "timeseries",
+            "title": "System Network Interface Traffic",
+            "targets": [
+              {
+                "expr": "rate(node_network_receive_bytes_total{device!~\"lo|docker.*|veth.*\"}[5m])",
+                "legendFormat": "RX: {{device}}"
+              },
+              {
+                "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|docker.*|veth.*\"}[5m]) * -1",
+                "legendFormat": "TX: {{device}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "binBps",
+                "decimals": 2,
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 20,
+                  "showPoints": "never",
+                  "spanNulls": true
+                }
+              }
+            },
+            "options": {
+              "tooltip": {"mode": "multi"},
+              "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}
+            }
+          },
+          {
+            "id": 7,
+            "gridPos": {"h": 6, "w": 8, "x": 0, "y": 32},
+            "type": "stat",
+            "title": "Total Network RX",
+            "targets": [
+              {
+                "expr": "sum(rate(node_network_receive_bytes_total{device!~\"lo|docker.*|veth.*\"}[5m]))",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "binBps",
+                "decimals": 2,
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 100000000},
+                    {"color": "red", "value": 900000000}
+                  ]
+                }
+              }
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area",
+              "reduceOptions": {
+                "values": false,
+                "calcs": ["last"]
+              }
+            }
+          },
+          {
+            "id": 8,
+            "gridPos": {"h": 6, "w": 8, "x": 8, "y": 32},
+            "type": "stat",
+            "title": "Total Network TX",
+            "targets": [
+              {
+                "expr": "sum(rate(node_network_transmit_bytes_total{device!~\"lo|docker.*|veth.*\"}[5m]))",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "binBps",
+                "decimals": 2,
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 100000000},
+                    {"color": "red", "value": 900000000}
+                  ]
+                }
+              }
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area",
+              "reduceOptions": {
+                "values": false,
+                "calcs": ["last"]
+              }
+            }
+          },
+          {
+            "id": 9,
+            "gridPos": {"h": 6, "w": 8, "x": 16, "y": 32},
+            "type": "stat",
+            "title": "Active Connections",
+            "targets": [
+              {
+                "expr": "sum(process_network_connections{state=\"ESTAB\"})",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0,
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 500},
+                    {"color": "red", "value": 1000}
+                  ]
+                }
+              }
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area",
+              "reduceOptions": {
+                "values": false,
+                "calcs": ["last"]
+              }
+            }
+          }
+        ]
+    }

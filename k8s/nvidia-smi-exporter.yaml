@@ -1,0 +1,139 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nvidia-smi-exporter-script
+  namespace: monitoring
+data:
+  exporter.sh: |
+    #!/bin/bash
+    
+    # Start simple HTTP server for Prometheus metrics
+    while true; do
+      {
+        echo "HTTP/1.1 200 OK"
+        echo "Content-Type: text/plain"
+        echo ""
+        
+        # Get GPU metrics
+        nvidia-smi --query-gpu=index,name,temperature.gpu,power.draw,memory.used,memory.total,utilization.gpu,utilization.memory,fan.speed --format=csv,noheader,nounits | while IFS=',' read -r idx name temp power mem_used mem_total gpu_util mem_util fan; do
+          # Clean up values
+          idx=$(echo $idx | tr -d ' ')
+          name=$(echo $name | tr -d ' ')
+          temp=$(echo $temp | tr -d ' ')
+          power=$(echo $power | tr -d ' ')
+          mem_used=$(echo $mem_used | tr -d ' ')
+          mem_total=$(echo $mem_total | tr -d ' ')
+          gpu_util=$(echo $gpu_util | tr -d ' ')
+          mem_util=$(echo $mem_util | tr -d ' ')
+          fan=$(echo $fan | tr -d ' ')
+          
+          # Output metrics
+          echo "# HELP nvidia_gpu_temperature_celsius GPU Temperature"
+          echo "# TYPE nvidia_gpu_temperature_celsius gauge"
+          echo "nvidia_gpu_temperature_celsius{gpu=\"$idx\",name=\"$name\"} $temp"
+          
+          echo "# HELP nvidia_gpu_power_watts GPU Power Usage"
+          echo "# TYPE nvidia_gpu_power_watts gauge"
+          echo "nvidia_gpu_power_watts{gpu=\"$idx\",name=\"$name\"} $power"
+          
+          echo "# HELP nvidia_gpu_memory_used_mb GPU Memory Used"
+          echo "# TYPE nvidia_gpu_memory_used_mb gauge"
+          echo "nvidia_gpu_memory_used_mb{gpu=\"$idx\",name=\"$name\"} $mem_used"
+          
+          echo "# HELP nvidia_gpu_memory_total_mb GPU Memory Total"
+          echo "# TYPE nvidia_gpu_memory_total_mb gauge"
+          echo "nvidia_gpu_memory_total_mb{gpu=\"$idx\",name=\"$name\"} $mem_total"
+          
+          echo "# HELP nvidia_gpu_utilization_percent GPU Utilization"
+          echo "# TYPE nvidia_gpu_utilization_percent gauge"
+          echo "nvidia_gpu_utilization_percent{gpu=\"$idx\",name=\"$name\"} $gpu_util"
+          
+          echo "# HELP nvidia_gpu_memory_utilization_percent GPU Memory Utilization"
+          echo "# TYPE nvidia_gpu_memory_utilization_percent gauge"
+          echo "nvidia_gpu_memory_utilization_percent{gpu=\"$idx\",name=\"$name\"} $mem_util"
+          
+          if [[ "$fan" != "[N/A]" ]]; then
+            echo "# HELP nvidia_gpu_fan_speed_percent GPU Fan Speed"
+            echo "# TYPE nvidia_gpu_fan_speed_percent gauge"
+            echo "nvidia_gpu_fan_speed_percent{gpu=\"$idx\",name=\"$name\"} $fan"
+          fi
+        done
+      } | nc -l -p 9400 -q 1
+      sleep 1
+    done
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-smi-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: nvidia-smi-exporter
+  template:
+    metadata:
+      labels:
+        app: nvidia-smi-exporter
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: nvidia-smi-exporter
+        image: ubuntu:22.04
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          apt-get update && apt-get install -y netcat
+          bash /scripts/exporter.sh
+        ports:
+        - containerPort: 9400
+          hostPort: 9400
+          name: metrics
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: nvidia-smi
+          mountPath: /usr/bin/nvidia-smi
+          readOnly: true
+        - name: nvidia-lib
+          mountPath: /usr/lib/x86_64-linux-gnu
+          readOnly: true
+        env:
+        - name: LD_LIBRARY_PATH
+          value: "/usr/lib/x86_64-linux-gnu"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: script
+        configMap:
+          name: nvidia-smi-exporter-script
+          defaultMode: 0755
+      - name: nvidia-smi
+        hostPath:
+          path: /usr/bin/nvidia-smi
+          type: File
+      - name: nvidia-lib
+        hostPath:
+          path: /usr/lib/x86_64-linux-gnu
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nvidia-smi-exporter
+  namespace: monitoring
+  labels:
+    app: nvidia-smi-exporter
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9400
+    targetPort: 9400
+  selector:
+    app: nvidia-smi-exporter

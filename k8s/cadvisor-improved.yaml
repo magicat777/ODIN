@@ -1,0 +1,196 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cadvisor-improved
+  namespace: monitoring
+  labels:
+    app: cadvisor-improved
+    component: container-metrics
+spec:
+  selector:
+    matchLabels:
+      app: cadvisor-improved
+  template:
+    metadata:
+      labels:
+        app: cadvisor-improved
+        component: container-metrics
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: cadvisor
+        image: gcr.io/cadvisor/cadvisor:v0.49.1
+        args:
+        # Reduce race conditions by increasing intervals
+        - --housekeeping_interval=30s          # Increased from 10s
+        - --max_housekeeping_interval=60s      # Increased from 15s
+        
+        # Disable unnecessary features to reduce overhead
+        - --event_storage_event_limit=default=0
+        - --event_storage_age_limit=default=0
+        - --disable_root_cgroup_stats=true     # Reduces race conditions
+        - --store_container_labels=false
+        
+        # Reduce log verbosity
+        - --v=1                                # Reduced verbosity (default is 2)
+        - --logtostderr=true
+        
+        # Performance optimizations
+        - --enable_load_reader=false           # Disable if not needed
+        - --docker_only=false                  # Support containerd
+        - --containerd=/run/containerd/containerd.sock
+        
+        # Resource efficiency
+        - --max_procs=1                        # Limit CPU usage
+        - --application_metrics_count_limit=100
+        
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        
+        env:
+        - name: CADVISOR_HEALTHCHECK_URL
+          value: "http://localhost:8080/healthz"
+          
+        resources:
+          requests:
+            cpu: 150m      # Slightly increased for better performance
+            memory: 200Mi  # Increased for better stability
+          limits:
+            cpu: 300m      # Increased limit
+            memory: 400Mi  # Increased limit
+            
+        volumeMounts:
+        - name: rootfs
+          mountPath: /rootfs
+          readOnly: true
+        - name: var-run
+          mountPath: /var/run
+          readOnly: true
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: dev-disk
+          mountPath: /dev/disk
+          readOnly: true
+        # Add containerd socket for better container runtime integration
+        - name: containerd-sock
+          mountPath: /run/containerd/containerd.sock
+          readOnly: true
+          
+        securityContext:
+          privileged: true
+          runAsUser: 0
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - SYS_RESOURCE
+            
+        # Enhanced health checks
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+          
+        readinessProbe:
+          httpGet:
+            path: /healthz  
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+          
+      hostNetwork: false
+      hostPID: true
+      restartPolicy: Always
+      serviceAccountName: default
+      
+      volumes:
+      - name: rootfs
+        hostPath:
+          path: /
+      - name: var-run
+        hostPath:
+          path: /var/run
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: dev-disk
+        hostPath:
+          path: /dev/disk
+      - name: containerd-sock
+        hostPath:
+          path: /run/containerd/containerd.sock
+          type: Socket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cadvisor-improved
+  namespace: monitoring
+  labels:
+    app: cadvisor-improved
+    component: container-metrics
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+spec:
+  selector:
+    app: cadvisor-improved
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+  clusterIP: None  # Headless service for DaemonSet
+---
+# Enhanced log filtering ConfigMap for cAdvisor
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cadvisor-log-filters
+  namespace: monitoring
+data:
+  race-condition-filters.txt: |
+    # cAdvisor race condition patterns to filter in log dashboards
+    race condition
+    manager.go:694
+    Error getting data for container
+    because of race condition
+    /kubepods.slice/kubepods-besteffort.slice
+    /kubepods.slice/kubepods-burstable.slice
+    cri-containerd-.*\.scope because of race condition
+    
+  logql-filters.txt: |
+    # LogQL expressions for filtering cAdvisor race conditions
+    
+    # Basic race condition filter
+    !~ "race condition"
+    
+    # Comprehensive cAdvisor noise filter  
+    !~ "race condition|manager.go:694|Error getting data for container.*because of race condition"
+    
+    # Specific kubepods slice filters
+    !~ "/kubepods.slice.*because of race condition"
+    
+    # Complete cAdvisor error exclusion for clean logs
+    {namespace="monitoring",pod=~"cadvisor-.*"} 
+    !~ "race condition" 
+    !~ "manager.go:694" 
+    !~ "Error getting data for container"
+    !~ "because of race condition"

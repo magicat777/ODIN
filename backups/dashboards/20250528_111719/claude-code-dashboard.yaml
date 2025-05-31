@@ -1,0 +1,519 @@
+apiVersion: v1
+data:
+  claude-code-dashboard.json: |
+    {
+      "id": null,
+      "uid": "claude-code-monitoring",
+      "title": "Claude Code API Monitoring",
+      "tags": ["claude", "api", "processes"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 1,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Claude Processes Overview",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "claude_code_process_count",
+              "legendFormat": "Active Processes",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(claude_code_process_threads)",
+              "legendFormat": "Total Threads",
+              "refId": "B"
+            },
+            {
+              "expr": "sum(claude_code_process_connections)",
+              "legendFormat": "Network Connections",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 10},
+                  {"color": "red", "value": 50}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Resource Usage",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "claude_code_total_cpu_percent",
+              "legendFormat": "Total CPU %",
+              "refId": "A"
+            },
+            {
+              "expr": "claude_code_total_memory_mb",
+              "legendFormat": "Total Memory MB",
+              "refId": "B"
+            },
+            {
+              "expr": "sum(claude_code_process_handles)",
+              "legendFormat": "Total File Handles",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 50},
+                  {"color": "red", "value": 80}
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Total CPU %"},
+                "properties": [{"id": "unit", "value": "percent"}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Total Memory MB"},
+                "properties": [{"id": "unit", "value": "decmbytes"}]
+              }
+            ]
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 8, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "API Usage & Cost",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "increase(claude_code_api_requests_total[1h])",
+              "legendFormat": "API Requests (1h)",
+              "refId": "A"
+            },
+            {
+              "expr": "increase(claude_code_api_tokens_used_total[1h])",
+              "legendFormat": "Tokens Used (1h)",
+              "refId": "B"
+            },
+            {
+              "expr": "increase(claude_code_api_cost_dollars_total[1h])",
+              "legendFormat": "Cost $ (1h)",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1000},
+                  {"color": "red", "value": 10000}
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Cost $ (1h)"},
+                "properties": [
+                  {"id": "unit", "value": "currencyUSD"},
+                  {"id": "decimals", "value": 2}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 16, "y": 0}
+        },
+        {
+          "id": 4,
+          "title": "CPU Usage by Process",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "claude_code_process_cpu_percent",
+              "legendFormat": "PID {{pid}} - {{cmd}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+        },
+        {
+          "id": 5,
+          "title": "Memory Usage by Process",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "claude_code_process_memory_mb{type=\"rss\"}",
+              "legendFormat": "PID {{pid}} - {{cmd}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "decmbytes"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+        },
+        {
+          "id": 6,
+          "title": "Process Details",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "claude_code_process_cpu_percent",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "claude_code_process_memory_mb{type=\"rss\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            },
+            {
+              "expr": "claude_code_process_threads",
+              "format": "table",
+              "instant": true,
+              "refId": "C"
+            },
+            {
+              "expr": "claude_code_process_handles",
+              "format": "table",
+              "instant": true,
+              "refId": "D"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "pid": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "cmd": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "Value #A": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #B": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #C": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #D": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  }
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value #A (lastNotNull)": "CPU %",
+                  "Value #B (lastNotNull)": "Memory MB",
+                  "Value #C (lastNotNull)": "Threads",
+                  "Value #D (lastNotNull)": "File Handles",
+                  "pid": "PID",
+                  "cmd": "Command"
+                },
+                "indexByName": {
+                  "pid": 0,
+                  "cmd": 1,
+                  "Value #A (lastNotNull)": 2,
+                  "Value #B (lastNotNull)": 3,
+                  "Value #C (lastNotNull)": 4,
+                  "Value #D (lastNotNull)": 5
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "displayMode": "color-background-solid",
+                "filterable": true
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "CPU %"},
+                "properties": [
+                  {"id": "unit", "value": "percent"},
+                  {"id": "decimals", "value": 1},
+                  {"id": "custom.displayMode", "value": "color-background"}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Memory MB"},
+                "properties": [
+                  {"id": "unit", "value": "decmbytes"},
+                  {"id": "decimals", "value": 1}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12}
+        },
+        {
+          "id": 7,
+          "title": "Open Ports",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "claude_code_open_ports",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true,
+                  "Value": true
+                },
+                "renameByName": {
+                  "pid": "PID",
+                  "port": "Port",
+                  "type": "Protocol"
+                }
+              }
+            }
+          ],
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 20}
+        },
+        {
+          "id": 8,
+          "title": "Network Connections by State",
+          "type": "piechart",
+          "targets": [
+            {
+              "expr": "sum by (state) (claude_code_process_connections)",
+              "legendFormat": "{{state}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 8, "y": 20}
+        },
+        {
+          "id": 9,
+          "title": "Process Lifetime",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "(time() - claude_code_process_start_time) / 3600",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Uptime (hours)",
+                  "pid": "PID",
+                  "cmd": "Command"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 2
+            }
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 16, "y": 20}
+        },
+        {
+          "id": 10,
+          "title": "API Response Times",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, rate(claude_code_api_response_time_seconds_bucket[5m]))",
+              "legendFormat": "p95 {{endpoint}}",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.99, rate(claude_code_api_response_time_seconds_bucket[5m]))",
+              "legendFormat": "p99 {{endpoint}}",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 26}
+        },
+        {
+          "id": 11,
+          "title": "Token Usage Trend",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "rate(claude_code_api_tokens_used_total[5m])",
+              "legendFormat": "{{model}} - {{type}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "stacking": {
+                  "mode": "normal"
+                }
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 26}
+        },
+        {
+          "id": 12,
+          "title": "API Cost Breakdown",
+          "type": "piechart",
+          "targets": [
+            {
+              "expr": "sum by (model) (increase(claude_code_api_cost_dollars_total[24h]))",
+              "legendFormat": "{{model}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "unit": "currencyUSD"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 34}
+        },
+        {
+          "id": 13,
+          "title": "Error Rate",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum by (status) (rate(claude_code_api_requests_total{status!=\"200\"}[5m]))",
+              "legendFormat": "Status {{status}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 34}
+        }
+      ]
+    }
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"claude-code-dashboard.json":"{\n  \"id\": null,\n  \"uid\": \"claude-code-monitoring\",\n  \"title\": \"Claude Code API Monitoring\",\n  \"tags\": [\"claude\", \"api\", \"processes\"],\n  \"style\": \"dark\",\n  \"timezone\": \"browser\",\n  \"refresh\": \"30s\",\n  \"schemaVersion\": 27,\n  \"version\": 1,\n  \"time\": {\n    \"from\": \"now-1h\",\n    \"to\": \"now\"\n  },\n  \"panels\": [\n    {\n      \"id\": 1,\n      \"title\": \"Claude Processes Overview\",\n      \"type\": \"stat\",\n      \"targets\": [\n        {\n          \"expr\": \"claude_code_process_count\",\n          \"legendFormat\": \"Active Processes\",\n          \"refId\": \"A\"\n        },\n        {\n          \"expr\": \"sum(claude_code_process_threads)\",\n          \"legendFormat\": \"Total Threads\",\n          \"refId\": \"B\"\n        },\n        {\n          \"expr\": \"sum(claude_code_process_connections)\",\n          \"legendFormat\": \"Network Connections\",\n          \"refId\": \"C\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"thresholds\"},\n          \"thresholds\": {\n            \"steps\": [\n              {\"color\": \"green\", \"value\": null},\n              {\"color\": \"yellow\", \"value\": 10},\n              {\"color\": \"red\", \"value\": 50}\n            ]\n          },\n          \"unit\": \"short\"\n        }\n      },\n      \"gridPos\": {\"h\": 4, \"w\": 8, \"x\": 0, \"y\": 0}\n    },\n    {\n      \"id\": 2,\n      \"title\": \"Resource Usage\",\n      \"type\": \"stat\",\n      \"targets\": [\n        {\n          \"expr\": \"claude_code_total_cpu_percent\",\n          \"legendFormat\": \"Total CPU %\",\n          \"refId\": \"A\"\n        },\n        {\n          \"expr\": \"claude_code_total_memory_mb\",\n          \"legendFormat\": \"Total Memory MB\",\n          \"refId\": \"B\"\n        },\n        {\n          \"expr\": \"sum(claude_code_process_handles)\",\n          \"legendFormat\": \"Total File Handles\",\n          \"refId\": \"C\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"thresholds\"},\n          \"thresholds\": {\n            \"steps\": [\n              {\"color\": \"green\", \"value\": null},\n              {\"color\": \"yellow\", \"value\": 50},\n              {\"color\": \"red\", \"value\": 80}\n            ]\n          }\n        },\n        \"overrides\": [\n          {\n            \"matcher\": {\"id\": \"byName\", \"options\": \"Total CPU %\"},\n            \"properties\": [{\"id\": \"unit\", \"value\": \"percent\"}]\n          },\n          {\n            \"matcher\": {\"id\": \"byName\", \"options\": \"Total Memory MB\"},\n            \"properties\": [{\"id\": \"unit\", \"value\": \"decmbytes\"}]\n          }\n        ]\n      },\n      \"gridPos\": {\"h\": 4, \"w\": 8, \"x\": 8, \"y\": 0}\n    },\n    {\n      \"id\": 3,\n      \"title\": \"API Usage \u0026 Cost\",\n      \"type\": \"stat\",\n      \"targets\": [\n        {\n          \"expr\": \"increase(claude_code_api_requests_total[1h])\",\n          \"legendFormat\": \"API Requests (1h)\",\n          \"refId\": \"A\"\n        },\n        {\n          \"expr\": \"increase(claude_code_api_tokens_used_total[1h])\",\n          \"legendFormat\": \"Tokens Used (1h)\",\n          \"refId\": \"B\"\n        },\n        {\n          \"expr\": \"increase(claude_code_api_cost_dollars_total[1h])\",\n          \"legendFormat\": \"Cost $ (1h)\",\n          \"refId\": \"C\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"thresholds\"},\n          \"thresholds\": {\n            \"steps\": [\n              {\"color\": \"green\", \"value\": null},\n              {\"color\": \"yellow\", \"value\": 1000},\n              {\"color\": \"red\", \"value\": 10000}\n            ]\n          }\n        },\n        \"overrides\": [\n          {\n            \"matcher\": {\"id\": \"byName\", \"options\": \"Cost $ (1h)\"},\n            \"properties\": [\n              {\"id\": \"unit\", \"value\": \"currencyUSD\"},\n              {\"id\": \"decimals\", \"value\": 2}\n            ]\n          }\n        ]\n      },\n      \"gridPos\": {\"h\": 4, \"w\": 8, \"x\": 16, \"y\": 0}\n    },\n    {\n      \"id\": 4,\n      \"title\": \"CPU Usage by Process\",\n      \"type\": \"timeseries\",\n      \"targets\": [\n        {\n          \"expr\": \"claude_code_process_cpu_percent\",\n          \"legendFormat\": \"PID {{pid}} - {{cmd}}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"custom\": {\n            \"drawStyle\": \"line\",\n            \"lineInterpolation\": \"linear\",\n            \"lineWidth\": 2,\n            \"fillOpacity\": 10\n          },\n          \"unit\": \"percent\"\n        }\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 0, \"y\": 4}\n    },\n    {\n      \"id\": 5,\n      \"title\": \"Memory Usage by Process\",\n      \"type\": \"timeseries\",\n      \"targets\": [\n        {\n          \"expr\": \"claude_code_process_memory_mb{type=\\\"rss\\\"}\",\n          \"legendFormat\": \"PID {{pid}} - {{cmd}}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"custom\": {\n            \"drawStyle\": \"line\",\n            \"lineInterpolation\": \"linear\",\n            \"lineWidth\": 2,\n            \"fillOpacity\": 10\n          },\n          \"unit\": \"decmbytes\"\n        }\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 12, \"y\": 4}\n    },\n    {\n      \"id\": 6,\n      \"title\": \"Process Details\",\n      \"type\": \"table\",\n      \"targets\": [\n        {\n          \"expr\": \"claude_code_process_cpu_percent\",\n          \"format\": \"table\",\n          \"instant\": true,\n          \"refId\": \"A\"\n        },\n        {\n          \"expr\": \"claude_code_process_memory_mb{type=\\\"rss\\\"}\",\n          \"format\": \"table\",\n          \"instant\": true,\n          \"refId\": \"B\"\n        },\n        {\n          \"expr\": \"claude_code_process_threads\",\n          \"format\": \"table\",\n          \"instant\": true,\n          \"refId\": \"C\"\n        },\n        {\n          \"expr\": \"claude_code_process_handles\",\n          \"format\": \"table\",\n          \"instant\": true,\n          \"refId\": \"D\"\n        }\n      ],\n      \"transformations\": [\n        {\n          \"id\": \"merge\",\n          \"options\": {}\n        },\n        {\n          \"id\": \"groupBy\",\n          \"options\": {\n            \"fields\": {\n              \"pid\": {\n                \"aggregations\": [],\n                \"operation\": \"groupby\"\n              },\n              \"cmd\": {\n                \"aggregations\": [],\n                \"operation\": \"groupby\"\n              },\n              \"Value #A\": {\n                \"aggregations\": [\"lastNotNull\"],\n                \"operation\": \"aggregate\"\n              },\n              \"Value #B\": {\n                \"aggregations\": [\"lastNotNull\"],\n                \"operation\": \"aggregate\"\n              },\n              \"Value #C\": {\n                \"aggregations\": [\"lastNotNull\"],\n                \"operation\": \"aggregate\"\n              },\n              \"Value #D\": {\n                \"aggregations\": [\"lastNotNull\"],\n                \"operation\": \"aggregate\"\n              }\n            }\n          }\n        },\n        {\n          \"id\": \"organize\",\n          \"options\": {\n            \"excludeByName\": {\n              \"Time\": true,\n              \"__name__\": true,\n              \"job\": true,\n              \"instance\": true\n            },\n            \"renameByName\": {\n              \"Value #A (lastNotNull)\": \"CPU %\",\n              \"Value #B (lastNotNull)\": \"Memory MB\",\n              \"Value #C (lastNotNull)\": \"Threads\",\n              \"Value #D (lastNotNull)\": \"File Handles\",\n              \"pid\": \"PID\",\n              \"cmd\": \"Command\"\n            },\n            \"indexByName\": {\n              \"pid\": 0,\n              \"cmd\": 1,\n              \"Value #A (lastNotNull)\": 2,\n              \"Value #B (lastNotNull)\": 3,\n              \"Value #C (lastNotNull)\": 4,\n              \"Value #D (lastNotNull)\": 5\n            }\n          }\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"custom\": {\n            \"displayMode\": \"color-background-solid\",\n            \"filterable\": true\n          }\n        },\n        \"overrides\": [\n          {\n            \"matcher\": {\"id\": \"byName\", \"options\": \"CPU %\"},\n            \"properties\": [\n              {\"id\": \"unit\", \"value\": \"percent\"},\n              {\"id\": \"decimals\", \"value\": 1},\n              {\"id\": \"custom.displayMode\", \"value\": \"color-background\"}\n            ]\n          },\n          {\n            \"matcher\": {\"id\": \"byName\", \"options\": \"Memory MB\"},\n            \"properties\": [\n              {\"id\": \"unit\", \"value\": \"decmbytes\"},\n              {\"id\": \"decimals\", \"value\": 1}\n            ]\n          }\n        ]\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 24, \"x\": 0, \"y\": 12}\n    },\n    {\n      \"id\": 7,\n      \"title\": \"Open Ports\",\n      \"type\": \"table\",\n      \"targets\": [\n        {\n          \"expr\": \"claude_code_open_ports\",\n          \"format\": \"table\",\n          \"instant\": true,\n          \"refId\": \"A\"\n        }\n      ],\n      \"transformations\": [\n        {\n          \"id\": \"organize\",\n          \"options\": {\n            \"excludeByName\": {\n              \"Time\": true,\n              \"__name__\": true,\n              \"job\": true,\n              \"instance\": true,\n              \"Value\": true\n            },\n            \"renameByName\": {\n              \"pid\": \"PID\",\n              \"port\": \"Port\",\n              \"type\": \"Protocol\"\n            }\n          }\n        }\n      ],\n      \"gridPos\": {\"h\": 6, \"w\": 8, \"x\": 0, \"y\": 20}\n    },\n    {\n      \"id\": 8,\n      \"title\": \"Network Connections by State\",\n      \"type\": \"piechart\",\n      \"targets\": [\n        {\n          \"expr\": \"sum by (state) (claude_code_process_connections)\",\n          \"legendFormat\": \"{{state}}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"unit\": \"short\"\n        }\n      },\n      \"gridPos\": {\"h\": 6, \"w\": 8, \"x\": 8, \"y\": 20}\n    },\n    {\n      \"id\": 9,\n      \"title\": \"Process Lifetime\",\n      \"type\": \"table\",\n      \"targets\": [\n        {\n          \"expr\": \"(time() - claude_code_process_start_time) / 3600\",\n          \"format\": \"table\",\n          \"instant\": true,\n          \"refId\": \"A\"\n        }\n      ],\n      \"transformations\": [\n        {\n          \"id\": \"organize\",\n          \"options\": {\n            \"excludeByName\": {\n              \"Time\": true,\n              \"__name__\": true,\n              \"job\": true,\n              \"instance\": true\n            },\n            \"renameByName\": {\n              \"Value\": \"Uptime (hours)\",\n              \"pid\": \"PID\",\n              \"cmd\": \"Command\"\n            }\n          }\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"decimals\": 2\n        }\n      },\n      \"gridPos\": {\"h\": 6, \"w\": 8, \"x\": 16, \"y\": 20}\n    },\n    {\n      \"id\": 10,\n      \"title\": \"API Response Times\",\n      \"type\": \"timeseries\",\n      \"targets\": [\n        {\n          \"expr\": \"histogram_quantile(0.95, rate(claude_code_api_response_time_seconds_bucket[5m]))\",\n          \"legendFormat\": \"p95 {{endpoint}}\",\n          \"refId\": \"A\"\n        },\n        {\n          \"expr\": \"histogram_quantile(0.99, rate(claude_code_api_response_time_seconds_bucket[5m]))\",\n          \"legendFormat\": \"p99 {{endpoint}}\",\n          \"refId\": \"B\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"custom\": {\n            \"drawStyle\": \"line\",\n            \"lineInterpolation\": \"linear\",\n            \"lineWidth\": 2,\n            \"fillOpacity\": 10\n          },\n          \"unit\": \"s\"\n        }\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 0, \"y\": 26}\n    },\n    {\n      \"id\": 11,\n      \"title\": \"Token Usage Trend\",\n      \"type\": \"timeseries\",\n      \"targets\": [\n        {\n          \"expr\": \"rate(claude_code_api_tokens_used_total[5m])\",\n          \"legendFormat\": \"{{model}} - {{type}}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"custom\": {\n            \"drawStyle\": \"line\",\n            \"lineInterpolation\": \"linear\",\n            \"lineWidth\": 2,\n            \"fillOpacity\": 10,\n            \"stacking\": {\n              \"mode\": \"normal\"\n            }\n          },\n          \"unit\": \"short\"\n        }\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 12, \"y\": 26}\n    },\n    {\n      \"id\": 12,\n      \"title\": \"API Cost Breakdown\",\n      \"type\": \"piechart\",\n      \"targets\": [\n        {\n          \"expr\": \"sum by (model) (increase(claude_code_api_cost_dollars_total[24h]))\",\n          \"legendFormat\": \"{{model}}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"unit\": \"currencyUSD\"\n        }\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 0, \"y\": 34}\n    },\n    {\n      \"id\": 13,\n      \"title\": \"Error Rate\",\n      \"type\": \"timeseries\",\n      \"targets\": [\n        {\n          \"expr\": \"sum by (status) (rate(claude_code_api_requests_total{status!=\\\"200\\\"}[5m]))\",\n          \"legendFormat\": \"Status {{status}}\",\n          \"refId\": \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\": {\"mode\": \"palette-classic\"},\n          \"custom\": {\n            \"drawStyle\": \"line\",\n            \"lineInterpolation\": \"linear\",\n            \"lineWidth\": 2,\n            \"fillOpacity\": 10\n          },\n          \"unit\": \"reqps\"\n        }\n      },\n      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 12, \"y\": 34}\n    }\n  ]\n}\n"},"kind":"ConfigMap","metadata":{"annotations":{},"labels":{"grafana_dashboard":"1"},"name":"claude-code-dashboard","namespace":"monitoring"}}
+  creationTimestamp: "2025-05-28T15:25:33Z"
+  labels:
+    grafana_dashboard: "1"
+  name: claude-code-dashboard
+  namespace: monitoring
+  resourceVersion: "35953"
+  uid: eac124a0-4984-4c6b-beab-a150b7a7ab50

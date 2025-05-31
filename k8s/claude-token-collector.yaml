@@ -1,0 +1,414 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: claude-token-collector-script
+  namespace: monitoring
+data:
+  claude-token-collector.py: |
+    #!/usr/bin/env python3
+    import os
+    import re
+    import json
+    import time
+    import subprocess
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+    from prometheus_client import Counter, Gauge, Histogram
+    import psutil
+    
+    # Token usage metrics
+    claude_tokens_input = Counter('claude_api_tokens_input_total', 'Total input tokens used', ['model', 'project'])
+    claude_tokens_output = Counter('claude_api_tokens_output_total', 'Total output tokens used', ['model', 'project'])
+    claude_tokens_total = Counter('claude_api_tokens_total', 'Total tokens used', ['model', 'project'])
+    claude_api_calls = Counter('claude_api_calls_total', 'Total API calls', ['model', 'project'])
+    claude_api_cost = Counter('claude_api_cost_dollars_total', 'Total cost in dollars', ['model', 'project'])
+    
+    # Session metrics
+    claude_session_tokens = Gauge('claude_session_tokens', 'Tokens used in current session', ['session_id', 'type'])
+    claude_session_cost = Gauge('claude_session_cost_dollars', 'Cost of current session', ['session_id'])
+    
+    # Rate metrics
+    claude_tokens_per_minute = Gauge('claude_tokens_per_minute', 'Token usage rate', ['model'])
+    claude_cost_per_hour = Gauge('claude_cost_per_hour_dollars', 'Cost rate per hour', ['model'])
+    
+    # Price mapping (as of 2024)
+    CLAUDE_PRICING = {
+        'claude-3-opus': {'input': 15.0 / 1000000, 'output': 75.0 / 1000000},
+        'claude-3-sonnet': {'input': 3.0 / 1000000, 'output': 15.0 / 1000000},
+        'claude-3-haiku': {'input': 0.25 / 1000000, 'output': 1.25 / 1000000},
+        'claude-2.1': {'input': 8.0 / 1000000, 'output': 24.0 / 1000000},
+        'claude-2.0': {'input': 8.0 / 1000000, 'output': 24.0 / 1000000},
+        'claude-instant': {'input': 0.8 / 1000000, 'output': 2.4 / 1000000}
+    }
+    
+    def parse_claude_json():
+        """Parse ~/.claude.json for project history and usage patterns"""
+        claude_json_path = os.path.expanduser('~/.claude.json')
+        usage_data = defaultdict(lambda: {'calls': 0, 'projects': set()})
+        
+        try:
+            with open(claude_json_path, 'r') as f:
+                data = json.load(f)
+                
+            # Extract project usage
+            for project_path, project_data in data.get('projects', {}).items():
+                project_name = os.path.basename(project_path)
+                history = project_data.get('history', [])
+                usage_data[project_name]['calls'] += len(history)
+                usage_data[project_name]['projects'].add(project_path)
+                
+        except Exception as e:
+            print(f"Error parsing claude.json: {e}")
+            
+        return usage_data
+    
+    def parse_terminal_output():
+        """Parse terminal output for token usage patterns"""
+        token_pattern = re.compile(
+            r'(?:Tokens|tokens):\s*(\d+)\s*(?:input|in)?\s*[,/]\s*(\d+)\s*(?:output|out)?'
+        )
+        cost_pattern = re.compile(
+            r'(?:Cost|cost|\$):\s*\$?([\d.]+)'
+        )
+        model_pattern = re.compile(
+            r'(?:Model|model|Using):\s*(claude-[\w.-]+)'
+        )
+        
+        usage_entries = []
+        
+        # Check terminal scrollback buffer (if accessible)
+        try:
+            # Try to get tmux or screen buffer
+            tmux_output = subprocess.run(['tmux', 'capture-pane', '-p'], 
+                                       capture_output=True, text=True)
+            if tmux_output.returncode == 0:
+                lines = tmux_output.stdout.split('\n')
+                parse_terminal_lines(lines, usage_entries, 
+                                   token_pattern, cost_pattern, model_pattern)
+        except:
+            pass
+            
+        # Check recent shell history with timestamps
+        try:
+            # Read bash history with timestamps if HISTTIMEFORMAT is set
+            history_output = subprocess.run(['bash', '-c', 'history'], 
+                                          capture_output=True, text=True)
+            if history_output.returncode == 0:
+                lines = history_output.stdout.split('\n')
+                parse_terminal_lines(lines, usage_entries,
+                                   token_pattern, cost_pattern, model_pattern)
+        except:
+            pass
+            
+        return usage_entries
+    
+    def parse_terminal_lines(lines, usage_entries, token_pattern, cost_pattern, model_pattern):
+        """Parse terminal lines for token usage information"""
+        current_entry = {}
+        
+        for line in lines:
+            # Look for token counts
+            token_match = token_pattern.search(line)
+            if token_match:
+                current_entry['input_tokens'] = int(token_match.group(1))
+                current_entry['output_tokens'] = int(token_match.group(2))
+                current_entry['timestamp'] = datetime.now()
+                
+            # Look for cost
+            cost_match = cost_pattern.search(line)
+            if cost_match:
+                current_entry['cost'] = float(cost_match.group(1))
+                
+            # Look for model
+            model_match = model_pattern.search(line)
+            if model_match:
+                current_entry['model'] = model_match.group(1)
+                
+            # If we have a complete entry, add it
+            if 'input_tokens' in current_entry and 'output_tokens' in current_entry:
+                if 'model' not in current_entry:
+                    current_entry['model'] = 'claude-3-sonnet'  # Default
+                usage_entries.append(current_entry.copy())
+                current_entry = {}
+    
+    def check_active_claude_sessions():
+        """Check for active Claude CLI sessions and estimate token usage"""
+        active_sessions = []
+        
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
+            try:
+                cmdline = ' '.join(proc.info['cmdline'] or [])
+                if 'claude' in cmdline.lower():
+                    # Estimate session duration
+                    session_duration = time.time() - proc.info['create_time']
+                    
+                    # Rough estimation based on session duration
+                    # Assume average conversation rate
+                    estimated_calls = session_duration / 60  # One call per minute
+                    estimated_tokens = estimated_calls * 1000  # 1000 tokens per call average
+                    
+                    active_sessions.append({
+                        'pid': proc.info['pid'],
+                        'duration': session_duration,
+                        'estimated_tokens': estimated_tokens,
+                        'estimated_cost': estimated_tokens * CLAUDE_PRICING['claude-3-sonnet']['input']
+                    })
+                    
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+                
+        return active_sessions
+    
+    def parse_claude_logs():
+        """Parse any Claude-specific log files"""
+        log_locations = [
+            '~/.claude/logs/',
+            '~/.local/share/claude/',
+            '~/.cache/claude/',
+            '/tmp/claude-*.log'
+        ]
+        
+        usage_data = []
+        
+        for location in log_locations:
+            expanded = os.path.expanduser(location)
+            try:
+                if os.path.isdir(expanded):
+                    for log_file in os.listdir(expanded):
+                        if log_file.endswith('.log'):
+                            parse_log_file(os.path.join(expanded, log_file), usage_data)
+                elif '*' in expanded:
+                    import glob
+                    for log_file in glob.glob(expanded):
+                        parse_log_file(log_file, usage_data)
+            except:
+                continue
+                
+        return usage_data
+    
+    def parse_log_file(log_path, usage_data):
+        """Parse individual log file for token usage"""
+        try:
+            with open(log_path, 'r') as f:
+                for line in f:
+                    # Look for JSON entries
+                    if '{' in line:
+                        try:
+                            entry = json.loads(line[line.index('{'):])
+                            if 'tokens' in entry or 'usage' in entry:
+                                usage_data.append(entry)
+                        except:
+                            pass
+        except:
+            pass
+    
+    def update_metrics(usage_entries):
+        """Update Prometheus metrics with collected usage data"""
+        total_cost_by_model = defaultdict(float)
+        total_tokens_by_model = defaultdict(int)
+        
+        for entry in usage_entries:
+            model = entry.get('model', 'claude-3-sonnet')
+            input_tokens = entry.get('input_tokens', 0)
+            output_tokens = entry.get('output_tokens', 0)
+            total_tokens = input_tokens + output_tokens
+            
+            # Calculate cost if not provided
+            if 'cost' not in entry and model in CLAUDE_PRICING:
+                cost = (input_tokens * CLAUDE_PRICING[model]['input'] + 
+                       output_tokens * CLAUDE_PRICING[model]['output'])
+                entry['cost'] = cost
+            
+            project = entry.get('project', 'unknown')
+            
+            # Update counters
+            claude_tokens_input.labels(model=model, project=project).inc(input_tokens)
+            claude_tokens_output.labels(model=model, project=project).inc(output_tokens)
+            claude_tokens_total.labels(model=model, project=project).inc(total_tokens)
+            claude_api_calls.labels(model=model, project=project).inc()
+            claude_api_cost.labels(model=model, project=project).inc(entry.get('cost', 0))
+            
+            # Track for rate calculations
+            total_cost_by_model[model] += entry.get('cost', 0)
+            total_tokens_by_model[model] += total_tokens
+    
+    def collect_all_usage():
+        """Collect usage data from all sources"""
+        all_usage = []
+        
+        # Parse Claude JSON
+        project_usage = parse_claude_json()
+        
+        # Parse terminal output
+        terminal_usage = parse_terminal_output()
+        all_usage.extend(terminal_usage)
+        
+        # Check active sessions
+        active_sessions = check_active_claude_sessions()
+        for session in active_sessions:
+            claude_session_tokens.labels(
+                session_id=str(session['pid']),
+                type='estimated'
+            ).set(session['estimated_tokens'])
+            claude_session_cost.labels(
+                session_id=str(session['pid'])
+            ).set(session['estimated_cost'])
+        
+        # Parse logs
+        log_usage = parse_claude_logs()
+        all_usage.extend(log_usage)
+        
+        # Update metrics
+        if all_usage:
+            update_metrics(all_usage)
+    
+    if __name__ == '__main__':
+        from prometheus_client import start_http_server
+        
+        # Start metrics server
+        start_http_server(9404)
+        print("Claude token collector started on port 9404")
+        
+        # Collect metrics every 30 seconds
+        while True:
+            try:
+                collect_all_usage()
+            except Exception as e:
+                print(f"Error collecting usage: {e}")
+            time.sleep(30)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: claude-token-collector-config
+  namespace: monitoring
+data:
+  token-patterns.yaml: |
+    # Common token usage patterns to search for
+    patterns:
+      terminal:
+        - regex: 'Tokens:\s*(\d+)\s*input,\s*(\d+)\s*output'
+          groups: ['input', 'output']
+        - regex: '(\d+)\s*tokens\s*\((\d+)\s*in,\s*(\d+)\s*out\)'
+          groups: ['total', 'input', 'output']
+        - regex: 'Usage:\s*\$?([\d.]+)'
+          groups: ['cost']
+      logs:
+        - regex: '"input_tokens":\s*(\d+)'
+          groups: ['input']
+        - regex: '"output_tokens":\s*(\d+)'
+          groups: ['output']
+        - regex: '"total_tokens":\s*(\d+)'
+          groups: ['total']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claude-token-collector
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: claude-token-collector
+  template:
+    metadata:
+      labels:
+        app: claude-token-collector
+    spec:
+      serviceAccountName: claude-token-collector
+      containers:
+      - name: collector
+        image: python:3.10-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install prometheus_client psutil
+          python /scripts/claude-token-collector.py
+        ports:
+        - containerPort: 9404
+          name: metrics
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: config
+          mountPath: /config
+        - name: claude-data
+          mountPath: /home/user/.claude
+          readOnly: true
+        - name: claude-json
+          mountPath: /home/user/.claude.json
+          readOnly: true
+        env:
+        - name: HOME
+          value: "/home/user"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: script
+        configMap:
+          name: claude-token-collector-script
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: claude-token-collector-config
+      - name: claude-data
+        hostPath:
+          path: /home/magicat777/.claude
+          type: Directory
+      - name: claude-json
+        hostPath:
+          path: /home/magicat777/.claude.json
+          type: File
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: claude-token-collector
+  namespace: monitoring
+  labels:
+    app: claude-token-collector
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9404"
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9404
+    targetPort: 9404
+  selector:
+    app: claude-token-collector
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: claude-token-collector
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: claude-token-collector
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-token-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: claude-token-collector
+subjects:
+- kind: ServiceAccount
+  name: claude-token-collector
+  namespace: monitoring

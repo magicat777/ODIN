@@ -1,0 +1,161 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      
+    # Templates for notifications
+    templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+    
+    route:
+      # Default receiver for all alerts
+      receiver: 'default-receiver'
+      
+      # Group alerts by these labels
+      group_by: ['alertname', 'cluster', 'service', 'component']
+      
+      # Wait before sending grouped notifications
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      
+      # Child routes for specific alert routing
+      routes:
+      # Critical alerts - immediate notification
+      - match:
+          severity: critical
+        receiver: 'critical-receiver'
+        group_wait: 0s
+        repeat_interval: 1h
+        
+      # K3s specific alerts
+      - match:
+          component: k3s
+        receiver: 'k3s-receiver'
+        group_by: ['alertname', 'service']
+        
+      # GPU alerts
+      - match:
+          component: gpu
+        receiver: 'gpu-receiver'
+        group_by: ['alertname', 'gpu']
+        
+      # Monitoring stack alerts
+      - match:
+          component: monitoring-stack
+        receiver: 'monitoring-receiver'
+        group_by: ['alertname', 'service']
+        
+      # Claude Code alerts
+      - match:
+          component: claude-code
+        receiver: 'claude-receiver'
+        group_by: ['alertname']
+        repeat_interval: 24h
+        
+      # Power/thermal alerts
+      - match_re:
+          alertname: '.*Power.*|.*Thermal.*|.*Temperature.*|.*Battery.*'
+        receiver: 'power-receiver'
+        group_wait: 30s
+        
+    receivers:
+    # Default receiver - logs to stdout
+    - name: 'default-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/webhook'
+        send_resolved: true
+        
+    # Critical alerts receiver
+    - name: 'critical-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/critical'
+        send_resolved: true
+        
+    # K3s alerts receiver
+    - name: 'k3s-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/k3s'
+        send_resolved: true
+        
+    # GPU alerts receiver
+    - name: 'gpu-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/gpu'
+        send_resolved: true
+        
+    # Monitoring stack receiver
+    - name: 'monitoring-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/monitoring'
+        send_resolved: true
+        
+    # Claude Code receiver
+    - name: 'claude-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/claude'
+        send_resolved: true
+        
+    # Power/thermal receiver
+    - name: 'power-receiver'
+      webhook_configs:
+      - url: 'http://webhook-logger:8080/power'
+        send_resolved: true
+        
+    # Inhibition rules
+    inhibit_rules:
+    # If K3s API server is down, inhibit other K3s component alerts
+    - source_match:
+        alertname: 'K3sAPIServerDown'
+      target_match_re:
+        component: 'k3s'
+      equal: ['cluster']
+      
+    # If Prometheus is down, inhibit target down alerts
+    - source_match:
+        alertname: 'PrometheusDown'
+      target_match:
+        alertname: 'PrometheusTargetDown'
+      equal: ['instance']
+      
+    # If node is not ready, inhibit pod alerts on that node
+    - source_match:
+        alertname: 'NodeNotReady'
+      target_match_re:
+        alertname: 'Pod.*'
+      equal: ['node']
+      
+    # If monitoring stack is critical, inhibit warning alerts
+    - source_match:
+        alertname: 'MonitoringStackCritical'
+      target_match:
+        component: 'monitoring-stack'
+        severity: 'warning'
+        
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-templates
+  namespace: monitoring
+data:
+  default.tmpl: |
+    {{ define "odin.default.subject" }}
+    [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.SortedPairs.Values | join " " }} {{ if gt (len .CommonLabels) (len .GroupLabels) }}({{ with .CommonLabels.Remove .GroupLabels.Names }}{{ .Values | join " " }}{{ end }}){{ end }}
+    {{ end }}
+    
+    {{ define "odin.default.text" }}
+    {{ range .Alerts }}
+    *Alert:* {{ .Annotations.summary }}{{ if .Labels.severity }} - `{{ .Labels.severity }}`{{ end }}
+    *Description:* {{ .Annotations.description }}
+    *Details:*
+    {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
+    {{ end }}
+    *Source:* {{ .GeneratorURL }}
+    {{ end }}
+    {{ end }}

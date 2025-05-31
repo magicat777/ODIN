@@ -1,0 +1,554 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: claude-code-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  claude-code-dashboard.json: |
+    {
+      "id": null,
+      "uid": "claude-code-monitoring",
+      "title": "Claude Code API Monitoring",
+      "tags": ["claude", "api", "processes"],
+      "style": "dark",
+      "timezone": "browser",
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "version": 2,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Claude Sessions Overview",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "claude_code_session_count",
+              "legendFormat": "Active Sessions",
+              "refId": "A"
+            },
+            {
+              "expr": "claude_code_process_count{type=\"total\"}",
+              "legendFormat": "Total Processes",
+              "refId": "B"
+            },
+            {
+              "expr": "claude_code_total_connections",
+              "legendFormat": "Network Connections",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 10},
+                  {"color": "red", "value": 50}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Resource Usage",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "claude_code_total_cpu_percent",
+              "legendFormat": "Total CPU %",
+              "refId": "A"
+            },
+            {
+              "expr": "claude_code_total_memory_mb{type=\"rss\"}",
+              "legendFormat": "Total Memory MB",
+              "refId": "B"
+            },
+            {
+              "expr": "sum(claude_code_process_handles)",
+              "legendFormat": "Total File Handles",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 50},
+                  {"color": "red", "value": 80}
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Total CPU %"},
+                "properties": [{"id": "unit", "value": "percent"}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Total Memory MB"},
+                "properties": [{"id": "unit", "value": "decmbytes"}]
+              }
+            ]
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 8, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "Process Breakdown",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "claude_code_process_count{type=\"parent\"}",
+              "legendFormat": "Parent Processes",
+              "refId": "A"
+            },
+            {
+              "expr": "claude_code_process_count{type=\"child\"}",
+              "legendFormat": "Child Processes",
+              "refId": "B"
+            },
+            {
+              "expr": "sum(claude_code_process_threads)",
+              "legendFormat": "Total Threads",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 10},
+                  {"color": "red", "value": 50}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 16, "y": 0}
+        },
+        {
+          "id": 4,
+          "title": "Memory Usage by Process",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "claude_code_process_memory_mb{type=\"rss\",role=\"parent\"}",
+              "legendFormat": "{{role}} - {{cmd}} (PID {{pid}})",
+              "refId": "A"
+            },
+            {
+              "expr": "claude_code_process_memory_mb{type=\"rss\",role=\"child\"}",
+              "legendFormat": "{{role}} - {{cmd}} (PID {{pid}})",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              },
+              "unit": "decmbytes"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+        },
+        {
+          "id": 5,
+          "title": "CPU Usage by Process",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "claude_code_process_cpu_percent",
+              "legendFormat": "{{role}} - {{cmd}} (PID {{pid}})",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+        },
+        {
+          "id": 6,
+          "title": "Process Tree Details",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "claude_code_process_cpu_percent",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "claude_code_process_memory_mb{type=\"rss\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            },
+            {
+              "expr": "claude_code_process_threads",
+              "format": "table",
+              "instant": true,
+              "refId": "C"
+            },
+            {
+              "expr": "claude_code_process_handles",
+              "format": "table",
+              "instant": true,
+              "refId": "D"
+            },
+            {
+              "expr": "sum by (pid, ppid, cmd, role) (claude_code_process_connections)",
+              "format": "table",
+              "instant": true,
+              "refId": "E"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "groupBy",
+              "options": {
+                "fields": {
+                  "pid": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "ppid": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "cmd": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "role": {
+                    "aggregations": [],
+                    "operation": "groupby"
+                  },
+                  "Value #A": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #B": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #C": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #D": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  },
+                  "Value #E": {
+                    "aggregations": ["lastNotNull"],
+                    "operation": "aggregate"
+                  }
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true,
+                  "type": true,
+                  "state": true
+                },
+                "renameByName": {
+                  "Value #A (lastNotNull)": "CPU %",
+                  "Value #B (lastNotNull)": "Memory MB",
+                  "Value #C (lastNotNull)": "Threads",
+                  "Value #D (lastNotNull)": "File Handles",
+                  "Value #E (lastNotNull)": "Connections",
+                  "pid": "PID",
+                  "ppid": "Parent PID",
+                  "cmd": "Command",
+                  "role": "Role"
+                },
+                "indexByName": {
+                  "role": 0,
+                  "pid": 1,
+                  "ppid": 2,
+                  "cmd": 3,
+                  "Value #A (lastNotNull)": 4,
+                  "Value #B (lastNotNull)": 5,
+                  "Value #C (lastNotNull)": 6,
+                  "Value #D (lastNotNull)": 7,
+                  "Value #E (lastNotNull)": 8
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "Parent PID"
+                  }
+                ]
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "displayMode": "color-background-solid",
+                "filterable": true,
+                "align": "left"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Role"},
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 80
+                  }
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "CPU %"},
+                "properties": [
+                  {"id": "unit", "value": "percent"},
+                  {"id": "decimals", "value": 1},
+                  {"id": "custom.displayMode", "value": "color-background"},
+                  {"id": "custom.width", "value": 80}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Memory MB"},
+                "properties": [
+                  {"id": "unit", "value": "decmbytes"},
+                  {"id": "decimals", "value": 1},
+                  {"id": "custom.width", "value": 100}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "PID"},
+                "properties": [
+                  {"id": "custom.width", "value": 60}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Parent PID"},
+                "properties": [
+                  {"id": "custom.width", "value": 90}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Threads"},
+                "properties": [
+                  {"id": "custom.width", "value": 70}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "File Handles"},
+                "properties": [
+                  {"id": "custom.width", "value": 100}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Connections"},
+                "properties": [
+                  {"id": "custom.width", "value": 100}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 12}
+        },
+        {
+          "id": 7,
+          "title": "Network Connections by State",
+          "type": "piechart",
+          "targets": [
+            {
+              "expr": "sum by (state) (claude_code_process_connections)",
+              "legendFormat": "{{state}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 22}
+        },
+        {
+          "id": 8,
+          "title": "Memory Distribution",
+          "type": "piechart",
+          "targets": [
+            {
+              "expr": "sum by (role) (claude_code_process_memory_mb{type=\"rss\"})",
+              "legendFormat": "{{role}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "unit": "decmbytes"
+            }
+          },
+          "options": {
+            "pieType": "donut",
+            "displayLabels": ["name", "percent", "value"],
+            "legendDisplayMode": "table",
+            "legendValues": ["value", "percent"]
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 8, "y": 22}
+        },
+        {
+          "id": 9,
+          "title": "Process Lifetime",
+          "type": "table",
+          "targets": [
+            {
+              "expr": "(time() - claude_code_process_start_time) / 3600",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "Value": "Uptime (hours)",
+                  "pid": "PID",
+                  "ppid": "Parent PID",
+                  "cmd": "Command",
+                  "role": "Role"
+                }
+              }
+            },
+            {
+              "id": "sortBy",
+              "options": {
+                "fields": {},
+                "sort": [
+                  {
+                    "field": "Uptime (hours)",
+                    "desc": true
+                  }
+                ]
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 2,
+              "custom": {
+                "align": "left"
+              }
+            }
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 16, "y": 22}
+        },
+        {
+          "id": 10,
+          "title": "Resource Usage Over Time",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "claude_code_total_memory_mb{type=\"rss\"}",
+              "legendFormat": "Total Memory (RSS)",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(claude_code_process_handles)",
+              "legendFormat": "Total File Handles",
+              "refId": "B"
+            },
+            {
+              "expr": "claude_code_total_connections",
+              "legendFormat": "Total Connections",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "axisPlacement": "auto",
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Total Memory (RSS)"},
+                "properties": [
+                  {"id": "unit", "value": "decmbytes"},
+                  {"id": "custom.axisPlacement", "value": "left"}
+                ]
+              },
+              {
+                "matcher": {"id": "byRegexp", "options": ".*Handles|.*Connections"},
+                "properties": [
+                  {"id": "unit", "value": "short"},
+                  {"id": "custom.axisPlacement", "value": "right"}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 28}
+        }
+      ]
+    }

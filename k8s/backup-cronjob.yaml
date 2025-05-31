@@ -1,0 +1,231 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: monitoring-backup-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: local-storage
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-scripts
+  namespace: monitoring
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -e
+    
+    BACKUP_DIR="/backups"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    
+    echo "Starting backup at $(date)"
+    
+    # Create backup directory
+    mkdir -p "$BACKUP_DIR/prometheus/$TIMESTAMP"
+    mkdir -p "$BACKUP_DIR/grafana/$TIMESTAMP"
+    mkdir -p "$BACKUP_DIR/configs/$TIMESTAMP"
+    
+    # Backup Prometheus data
+    echo "Backing up Prometheus data..."
+    if [ -d "/prometheus-data" ]; then
+      tar -czf "$BACKUP_DIR/prometheus/$TIMESTAMP/prometheus-data.tar.gz" -C /prometheus-data .
+      echo "Prometheus data backed up successfully"
+    fi
+    
+    # Backup Grafana data
+    echo "Backing up Grafana data..."
+    if [ -d "/grafana-data" ]; then
+      tar -czf "$BACKUP_DIR/grafana/$TIMESTAMP/grafana-data.tar.gz" -C /grafana-data .
+      echo "Grafana data backed up successfully"
+    fi
+    
+    # Backup configurations
+    echo "Backing up configurations..."
+    kubectl get configmap -n monitoring -o yaml > "$BACKUP_DIR/configs/$TIMESTAMP/configmaps.yaml"
+    kubectl get secret -n monitoring -o yaml > "$BACKUP_DIR/configs/$TIMESTAMP/secrets.yaml"
+    kubectl get pvc -n monitoring -o yaml > "$BACKUP_DIR/configs/$TIMESTAMP/pvcs.yaml"
+    
+    # Create metadata file
+    cat > "$BACKUP_DIR/configs/$TIMESTAMP/metadata.json" <<EOF
+    {
+      "timestamp": "$TIMESTAMP",
+      "date": "$(date)",
+      "kubernetes_version": "$(kubectl version --short 2>/dev/null | grep Server | awk '{print $3}')",
+      "namespace": "monitoring"
+    }
+    EOF
+    
+    # Cleanup old backups (keep last 7 days)
+    echo "Cleaning up old backups..."
+    find "$BACKUP_DIR/prometheus" -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+    find "$BACKUP_DIR/grafana" -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+    find "$BACKUP_DIR/configs" -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+    
+    # List current backups
+    echo "Current backups:"
+    du -sh "$BACKUP_DIR"/*/* 2>/dev/null | tail -20
+    
+    echo "Backup completed at $(date)"
+  
+  restore.sh: |
+    #!/bin/bash
+    set -e
+    
+    BACKUP_DIR="/backups"
+    
+    if [ -z "$1" ]; then
+      echo "Usage: $0 <timestamp>"
+      echo "Available backups:"
+      ls -la "$BACKUP_DIR/configs/" | grep -E '^d' | awk '{print $9}' | grep -v '^\.$' | grep -v '^\.\.$'
+      exit 1
+    fi
+    
+    TIMESTAMP="$1"
+    
+    echo "Starting restore from backup $TIMESTAMP at $(date)"
+    
+    # Verify backup exists
+    if [ ! -d "$BACKUP_DIR/configs/$TIMESTAMP" ]; then
+      echo "Backup $TIMESTAMP not found!"
+      exit 1
+    fi
+    
+    # Show backup metadata
+    if [ -f "$BACKUP_DIR/configs/$TIMESTAMP/metadata.json" ]; then
+      echo "Backup metadata:"
+      cat "$BACKUP_DIR/configs/$TIMESTAMP/metadata.json"
+    fi
+    
+    read -p "Are you sure you want to restore from this backup? (yes/no) " -n 3 -r
+    echo
+    if [[ ! $REPLY =~ ^yes$ ]]; then
+      echo "Restore cancelled"
+      exit 1
+    fi
+    
+    # Restore Prometheus data
+    if [ -f "$BACKUP_DIR/prometheus/$TIMESTAMP/prometheus-data.tar.gz" ]; then
+      echo "Restoring Prometheus data..."
+      rm -rf /prometheus-data/*
+      tar -xzf "$BACKUP_DIR/prometheus/$TIMESTAMP/prometheus-data.tar.gz" -C /prometheus-data/
+      echo "Prometheus data restored"
+    fi
+    
+    # Restore Grafana data
+    if [ -f "$BACKUP_DIR/grafana/$TIMESTAMP/grafana-data.tar.gz" ]; then
+      echo "Restoring Grafana data..."
+      rm -rf /grafana-data/*
+      tar -xzf "$BACKUP_DIR/grafana/$TIMESTAMP/grafana-data.tar.gz" -C /grafana-data/
+      echo "Grafana data restored"
+    fi
+    
+    echo "Restore completed at $(date)"
+    echo "Please restart Prometheus and Grafana deployments to apply changes"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: monitoring-backup
+  namespace: monitoring
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: monitoring-backup-sa
+          containers:
+          - name: backup
+            image: bitnami/kubectl:latest
+            command: ["/bin/bash", "/scripts/backup.sh"]
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+            - name: prometheus-data
+              mountPath: /prometheus-data
+              readOnly: true
+            - name: grafana-data
+              mountPath: /grafana-data
+              readOnly: true
+            - name: scripts
+              mountPath: /scripts
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+          restartPolicy: OnFailure
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: monitoring-backup-pvc
+          - name: prometheus-data
+            persistentVolumeClaim:
+              claimName: prometheus-pvc
+          - name: grafana-data
+            persistentVolumeClaim:
+              claimName: grafana-pvc
+          - name: scripts
+            configMap:
+              name: backup-scripts
+              defaultMode: 0755
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: monitoring-backup-sa
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: monitoring-backup-role
+  namespace: monitoring
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets", "persistentvolumeclaims"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: monitoring-backup-rb
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: monitoring-backup-role
+subjects:
+- kind: ServiceAccount
+  name: monitoring-backup-sa
+  namespace: monitoring
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: monitoring-backup-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /var/lib/odin/backups
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - razerblade

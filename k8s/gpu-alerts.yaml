@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-alert-rules
+  namespace: monitoring
+data:
+  gpu-alerts.yaml: |
+    groups:
+    - name: gpu_alerts
+      interval: 30s
+      rules:
+      # GPU Temperature Alerts
+      - alert: GPUHighTemperature
+        expr: nvidia_gpu_temperature_celsius > 80
+        for: 2m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU temperature is high ({{ $value }}°C)"
+          description: "GPU {{ $labels.gpu }} temperature is {{ $value }}°C, above 80°C threshold on {{ $labels.instance }}"
+          
+      - alert: GPUCriticalTemperature
+        expr: nvidia_gpu_temperature_celsius > 85
+        for: 1m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU temperature is critical ({{ $value }}°C)"
+          description: "GPU {{ $labels.gpu }} temperature is {{ $value }}°C, above 85°C critical threshold on {{ $labels.instance }}. Immediate action required!"
+          
+      # GPU Power Alerts
+      - alert: GPUHighPowerDraw
+        expr: nvidia_gpu_power_draw_watts > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU power draw is high ({{ $value }}W)"
+          description: "GPU {{ $labels.gpu }} is drawing {{ $value }}W, above 300W threshold on {{ $labels.instance }}"
+          
+      - alert: GPUPowerAnomaly
+        expr: |
+          abs(nvidia_gpu_power_draw_watts - avg_over_time(nvidia_gpu_power_draw_watts[30m])) 
+          > (2 * stddev_over_time(nvidia_gpu_power_draw_watts[30m]))
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU power draw anomaly detected"
+          description: "GPU {{ $labels.gpu }} power draw deviates significantly from normal pattern on {{ $labels.instance }}"
+          
+      # GPU Memory Alerts
+      - alert: GPUMemoryHighUsage
+        expr: (nvidia_gpu_memory_used_mb / nvidia_gpu_memory_total_mb) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU memory usage is high ({{ $value }}%)"
+          description: "GPU {{ $labels.gpu }} memory usage is {{ $value }}% on {{ $labels.instance }}"
+          
+      - alert: GPUMemoryCritical
+        expr: (nvidia_gpu_memory_used_mb / nvidia_gpu_memory_total_mb) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU memory usage is critical ({{ $value }}%)"
+          description: "GPU {{ $labels.gpu }} memory usage is {{ $value }}% on {{ $labels.instance }}. Applications may crash!"
+          
+      # GPU Utilization Alerts
+      - alert: GPUSustainedHighUtilization
+        expr: avg_over_time(nvidia_gpu_utilization_percent[10m]) > 95
+        for: 15m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU sustained high utilization"
+          description: "GPU {{ $labels.gpu }} has been at {{ $value }}% utilization for 15 minutes on {{ $labels.instance }}"
+          
+      # GPU Health Alerts
+      - alert: GPUMetricsDown
+        expr: up{job="power-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU metrics collection is down"
+          description: "Power exporter is not collecting GPU metrics on {{ $labels.instance }}"
+          
+      - alert: GPUFanSpeedHigh
+        expr: nvidia_gpu_fan_speed_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU fan speed is high ({{ $value }}%)"
+          description: "GPU {{ $labels.gpu }} fan is running at {{ $value }}% on {{ $labels.instance }}, indicating thermal stress"
+          
+    - name: gpu_performance_alerts
+      interval: 60s
+      rules:
+      # Thermal Throttling Detection
+      - alert: GPUThermalThrottling
+        expr: |
+          (nvidia_gpu_temperature_celsius > 83) 
+          and 
+          (rate(nvidia_gpu_utilization_percent[5m]) < -10)
+        for: 2m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU thermal throttling detected"
+          description: "GPU {{ $labels.gpu }} appears to be thermal throttling on {{ $labels.instance }}. Temperature: {{ $value }}°C"
+          
+      # Combined Alerts
+      - alert: GPUUnderStress
+        expr: |
+          (nvidia_gpu_temperature_celsius > 78) 
+          and 
+          (nvidia_gpu_power_draw_watts > 280) 
+          and 
+          (nvidia_gpu_utilization_percent > 90)
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU under heavy stress"
+          description: "GPU {{ $labels.gpu }} is under heavy stress - Temp: {{ $value }}°C, Power: >280W, Util: >90% on {{ $labels.instance }}"

@@ -1,0 +1,476 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: host-process-dashboard
+  namespace: monitoring
+data:
+  host-process-monitoring.json: |
+    {
+      "id": null,
+      "uid": "host-process-monitor",
+      "title": "Host Process Monitoring - Ubuntu 22.04",
+      "tags": ["host", "process", "system"],
+      "timezone": "browser",
+      "schemaVersion": 30,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "type": "table",
+            "title": "Top CPU Consuming Processes",
+            "targets": [
+              {
+                "expr": "topk(10, sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100)",
+                "format": "table",
+                "instant": true,
+                "legendFormat": "{{groupname}}"
+              }
+            ],
+            "options": {
+              "showHeader": true
+            },
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 2,
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "color-background-solid"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "groupname"},
+                  "properties": [
+                    {"id": "displayName", "value": "Process Name"},
+                    {"id": "custom.width", "value": 200}
+                  ]
+                },
+                {
+                  "matcher": {"id": "byName", "options": "Value"},
+                  "properties": [
+                    {"id": "displayName", "value": "CPU %"},
+                    {"id": "custom.displayMode", "value": "gradient-gauge"},
+                    {"id": "thresholds", "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {"color": "green", "value": null},
+                        {"color": "yellow", "value": 50},
+                        {"color": "red", "value": 80}
+                      ]
+                    }}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "type": "table",
+            "title": "Top Memory Consuming Processes",
+            "targets": [
+              {
+                "expr": "topk(10, sum by (groupname) (namedprocess_namegroup_memory_bytes) / 1024 / 1024)",
+                "format": "table",
+                "instant": true,
+                "legendFormat": "{{groupname}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "decmbytes",
+                "decimals": 2,
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "color-background-solid"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "groupname"},
+                  "properties": [
+                    {"id": "displayName", "value": "Process Name"},
+                    {"id": "custom.width", "value": 200}
+                  ]
+                },
+                {
+                  "matcher": {"id": "byName", "options": "Value"},
+                  "properties": [
+                    {"id": "displayName", "value": "Memory (MB)"},
+                    {"id": "custom.displayMode", "value": "gradient-gauge"}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+            "type": "timeseries",
+            "title": "Process CPU Usage Over Time",
+            "targets": [
+              {
+                "expr": "topk(5, sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100)",
+                "legendFormat": "{{groupname}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 1,
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never",
+                  "spanNulls": true
+                }
+              }
+            },
+            "options": {
+              "tooltip": {"mode": "multi"},
+              "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}
+            }
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+            "type": "timeseries",
+            "title": "Process Memory Usage Over Time",
+            "targets": [
+              {
+                "expr": "topk(5, sum by (groupname) (namedprocess_namegroup_memory_bytes) / 1024 / 1024 / 1024)",
+                "legendFormat": "{{groupname}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "decgbytes",
+                "decimals": 2,
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never",
+                  "spanNulls": true
+                }
+              }
+            },
+            "options": {
+              "tooltip": {"mode": "multi"},
+              "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}
+            }
+          },
+          {
+            "id": 5,
+            "gridPos": {"h": 6, "w": 12, "x": 0, "y": 24},
+            "type": "stat",
+            "title": "Total Running Processes",
+            "targets": [
+              {
+                "expr": "namedprocess_namegroup_num_procs",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 500},
+                    {"color": "red", "value": 1000}
+                  ]
+                }
+              }
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area",
+              "reduceOptions": {
+                "values": false,
+                "calcs": ["sum"]
+              }
+            }
+          },
+          {
+            "id": 6,
+            "gridPos": {"h": 6, "w": 12, "x": 12, "y": 24},
+            "type": "stat",
+            "title": "Total Threads",
+            "targets": [
+              {
+                "expr": "sum(namedprocess_namegroup_num_threads)",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 2000},
+                    {"color": "red", "value": 5000}
+                  ]
+                }
+              }
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area",
+              "reduceOptions": {
+                "values": false,
+                "calcs": ["last"]
+              }
+            }
+          },
+          {
+            "id": 7,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
+            "type": "table",
+            "title": "Long Running Processes (>1 hour)",
+            "targets": [
+              {
+                "expr": "topk(20, (time() - namedprocess_namegroup_oldest_start_time_seconds) > 3600)",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {},
+                  "indexByName": {},
+                  "renameByName": {
+                    "groupname": "Process",
+                    "Value": "Running Time (hours)"
+                  }
+                }
+              },
+              {
+                "id": "calculateField",
+                "options": {
+                  "alias": "Hours",
+                  "mode": "reduceRow",
+                  "reduce": {
+                    "reducer": "last"
+                  },
+                  "replaceFields": false
+                }
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "custom": {
+                  "align": "auto",
+                  "displayMode": "auto"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "Value"},
+                  "properties": [
+                    {"id": "unit", "value": "s"},
+                    {"id": "decimals", "value": 0},
+                    {"id": "custom.displayMode", "value": "color-text"},
+                    {"id": "mappings", "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "from": 0,
+                          "to": 3600,
+                          "result": {"text": "< 1 hour", "color": "green"}
+                        }
+                      },
+                      {
+                        "type": "value",
+                        "options": {
+                          "from": 3600,
+                          "to": 86400,
+                          "result": {"text": "< 1 day", "color": "yellow"}
+                        }
+                      }
+                    ]}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 8,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
+            "type": "piechart",
+            "title": "CPU Usage by Process Type",
+            "targets": [
+              {
+                "expr": "topk(10, sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100)",
+                "legendFormat": "{{groupname}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "decimals": 1
+              }
+            },
+            "options": {
+              "displayLabels": ["name", "percent"],
+              "legendDisplayMode": "table",
+              "legendPlacement": "right",
+              "legendValues": ["value", "percent"],
+              "pieType": "donut"
+            }
+          },
+          {
+            "id": 9,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 38},
+            "type": "timeseries",
+            "title": "Process Count Trends",
+            "targets": [
+              {
+                "expr": "topk(10, namedprocess_namegroup_num_procs)",
+                "legendFormat": "{{groupname}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never",
+                  "spanNulls": true
+                }
+              }
+            },
+            "options": {
+              "tooltip": {"mode": "multi"},
+              "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "last"]}
+            }
+          },
+          {
+            "id": 10,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 46},
+            "type": "table",
+            "title": "Process States",
+            "targets": [
+              {
+                "expr": "sum by (state) (namedprocess_namegroup_states)",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "custom": {
+                  "align": "center",
+                  "displayMode": "color-background-solid"
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "state"},
+                  "properties": [
+                    {"id": "displayName", "value": "Process State"},
+                    {"id": "custom.width", "value": 150}
+                  ]
+                },
+                {
+                  "matcher": {"id": "byName", "options": "Value"},
+                  "properties": [
+                    {"id": "displayName", "value": "Count"},
+                    {"id": "custom.displayMode", "value": "gradient-gauge"}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 11,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 46},
+            "type": "timeseries",
+            "title": "File Descriptors by Process",
+            "targets": [
+              {
+                "expr": "topk(5, namedprocess_namegroup_open_filedesc)",
+                "legendFormat": "{{groupname}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 2,
+                  "fillOpacity": 10,
+                  "showPoints": "never"
+                }
+              }
+            },
+            "options": {
+              "tooltip": {"mode": "multi"},
+              "legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}
+            }
+          },
+          {
+            "id": 12,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 54},
+            "type": "heatmap",
+            "title": "Process CPU Usage Heatmap",
+            "targets": [
+              {
+                "expr": "sum by (groupname) (rate(namedprocess_namegroup_cpu_seconds_total[5m])) * 100",
+                "format": "heatmap",
+                "legendFormat": "{{groupname}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "custom": {
+                  "scaleDistribution": {"type": "linear"},
+                  "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+                }
+              }
+            },
+            "options": {
+              "calculate": false,
+              "yAxis": {
+                "axisPlacement": "left",
+                "reverse": false,
+                "unit": "short"
+              },
+              "rowsFrame": {
+                "layout": "auto"
+              },
+              "color": {
+                "mode": "scheme",
+                "scheme": "Spectral",
+                "steps": 64
+              },
+              "cellRadius": 1,
+              "cellGap": 1,
+              "exemplars": {"color": "rgba(255,0,255,0.7)"}
+            }
+          }
+        ]
+    }

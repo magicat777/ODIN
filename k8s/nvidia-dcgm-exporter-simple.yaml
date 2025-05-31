@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-dcgm-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: nvidia-dcgm-exporter
+  template:
+    metadata:
+      labels:
+        app: nvidia-dcgm-exporter
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: nvidia-dcgm-exporter
+        image: nvidia/dcgm-exporter:3.3.8-3.6.0-ubuntu22.04
+        env:
+        - name: DCGM_EXPORTER_LISTEN
+          value: ":9400"
+        - name: DCGM_EXPORTER_KUBERNETES
+          value: "false"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        ports:
+        - containerPort: 9400
+          hostPort: 9400
+          name: metrics
+        volumeMounts:
+        - name: dev
+          mountPath: /dev
+        - name: sys
+          mountPath: /sys
+        - name: host-usr
+          mountPath: /host/usr
+          readOnly: true
+        env:
+        - name: LD_LIBRARY_PATH
+          value: "/host/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+        - name: PATH
+          value: "/host/usr/bin:$PATH"
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+      volumes:
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: host-usr
+        hostPath:
+          path: /usr
+      tolerations:
+      - operator: "Exists"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nvidia-dcgm-exporter
+  namespace: monitoring
+  labels:
+    app: nvidia-dcgm-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9400"
+spec:
+  selector:
+    app: nvidia-dcgm-exporter
+  ports:
+  - port: 9400
+    targetPort: 9400
+    name: metrics
+  type: ClusterIP

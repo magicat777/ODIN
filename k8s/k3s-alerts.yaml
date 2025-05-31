@@ -1,0 +1,211 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k3s-alert-rules
+  namespace: monitoring
+data:
+  k3s-alerts.yaml: |
+    groups:
+    - name: k3s_core_services
+      interval: 30s
+      rules:
+      # K3s API Server
+      - alert: K3sAPIServerDown
+        expr: up{job="kubernetes-apiservers"} == 0 or absent(up{job="kubernetes-apiservers"})
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+          service: apiserver
+        annotations:
+          summary: "K3s API Server is down"
+          description: "K3s API Server has been unreachable for more than 2 minutes. This is critical for cluster operation."
+          
+      - alert: K3sAPIServerHighLatency
+        expr: histogram_quantile(0.99, sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers"}[5m])) by (verb, le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: k3s
+          service: apiserver
+        annotations:
+          summary: "K3s API Server latency is high"
+          description: "K3s API Server 99th percentile latency for {{ $labels.verb }} is {{ $value }}s"
+          
+      - alert: K3sAPIServerErrors
+        expr: rate(apiserver_request_total{job="kubernetes-apiservers",code=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: k3s
+          service: apiserver
+        annotations:
+          summary: "K3s API Server returning errors"
+          description: "K3s API Server is returning {{ $value }} 5xx errors per second"
+          
+      # K3s Controller Manager
+      - alert: K3sControllerManagerDown
+        expr: up{job="kubernetes-controller-manager"} == 0 or absent(up{job="kubernetes-controller-manager"})
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+          service: controller-manager
+        annotations:
+          summary: "K3s Controller Manager is down"
+          description: "K3s Controller Manager has been down for more than 2 minutes"
+          
+      # K3s Scheduler
+      - alert: K3sSchedulerDown
+        expr: up{job="kubernetes-scheduler"} == 0 or absent(up{job="kubernetes-scheduler"})
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+          service: scheduler
+        annotations:
+          summary: "K3s Scheduler is down"
+          description: "K3s Scheduler has been down for more than 2 minutes. New pods cannot be scheduled."
+          
+      # K3s etcd (if external)
+      - alert: K3sEtcdDown
+        expr: up{job="etcd"} == 0 or absent(up{job="etcd"})
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+          service: etcd
+        annotations:
+          summary: "K3s etcd is down"
+          description: "K3s etcd has been down for more than 2 minutes. Cluster state storage is unavailable."
+          
+      - alert: K3sEtcdHighLatency
+        expr: histogram_quantile(0.99, rate(etcd_disk_backend_commit_duration_seconds_bucket[5m])) > 0.25
+        for: 5m
+        labels:
+          severity: warning
+          component: k3s
+          service: etcd
+        annotations:
+          summary: "K3s etcd commit latency is high"
+          description: "K3s etcd 99th percentile commit latency is {{ $value }}s"
+          
+      # Kubelet
+      - alert: KubeletDown
+        expr: up{job="kubernetes-nodes"} == 0 or absent(up{job="kubernetes-nodes"})
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+          service: kubelet
+        annotations:
+          summary: "Kubelet is down"
+          description: "Kubelet on {{ $labels.node }} has been down for more than 2 minutes"
+          
+      - alert: KubeletTooManyPods
+        expr: kubelet_running_pods / kubelet_node_config_capacity_pods > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: k3s
+          service: kubelet
+        annotations:
+          summary: "Kubelet approaching pod limit"
+          description: "Kubelet on {{ $labels.node }} is running {{ $value }}% of its pod capacity"
+          
+      # Node conditions
+      - alert: NodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: k3s
+        annotations:
+          summary: "Kubernetes node not ready"
+          description: "Node {{ $labels.node }} has been not ready for more than 5 minutes"
+          
+      - alert: NodeMemoryPressure
+        expr: kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+        annotations:
+          summary: "Node has memory pressure"
+          description: "Node {{ $labels.node }} is experiencing memory pressure"
+          
+      - alert: NodeDiskPressure
+        expr: kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+        annotations:
+          summary: "Node has disk pressure"
+          description: "Node {{ $labels.node }} is experiencing disk pressure"
+          
+      - alert: NodePIDPressure
+        expr: kube_node_status_condition{condition="PIDPressure",status="true"} == 1
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+        annotations:
+          summary: "Node has PID pressure"
+          description: "Node {{ $labels.node }} is experiencing PID pressure (too many processes)"
+          
+      # Critical daemon pods
+      - alert: CoreDNSDown
+        expr: kube_deployment_status_replicas_available{namespace="kube-system",deployment="coredns"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+          service: coredns
+        annotations:
+          summary: "CoreDNS is down"
+          description: "CoreDNS has no available replicas. DNS resolution in cluster will fail."
+          
+      - alert: TraefikDown
+        expr: kube_deployment_status_replicas_available{namespace="kube-system",deployment="traefik"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: k3s
+          service: traefik
+        annotations:
+          summary: "Traefik ingress controller is down"
+          description: "Traefik has no available replicas. Ingress routing may be affected."
+          
+      # K3s Service Process
+      - alert: K3sServiceDown
+        expr: up{job="node-exporter"} == 1 and node_systemd_unit_state{name="k3s.service",state="active"} != 1
+        for: 2m
+        labels:
+          severity: critical
+          component: k3s
+          service: k3s-service
+        annotations:
+          summary: "K3s service is not active"
+          description: "K3s systemd service is not in active state on {{ $labels.instance }}"
+          
+      # Certificate expiry
+      - alert: K3sCertificateExpiringSoon
+        expr: (kube_certificate_expiration_timestamp_seconds - time()) / 86400 < 30
+        for: 1h
+        labels:
+          severity: warning
+          component: k3s
+        annotations:
+          summary: "K3s certificate expiring soon"
+          description: "Certificate {{ $labels.name }} will expire in {{ $value }} days"
+          
+      - alert: K3sCertificateExpiringCritical
+        expr: (kube_certificate_expiration_timestamp_seconds - time()) / 86400 < 7
+        for: 1h
+        labels:
+          severity: critical
+          component: k3s
+        annotations:
+          summary: "K3s certificate expiring critically soon"
+          description: "Certificate {{ $labels.name }} will expire in {{ $value }} days!"

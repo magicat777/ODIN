@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: razer-exporter-script
+  namespace: monitoring
+data:
+  razer-exporter.py: |
+    #!/usr/bin/env python3
+    import os
+    import time
+    import glob
+    from prometheus_client import start_http_server, Gauge
+    
+    # Define Prometheus metrics
+    battery_level = Gauge('razer_battery_level_percent', 'Battery level percentage', ['device'])
+    battery_charging = Gauge('razer_battery_charging', 'Battery charging status', ['device'])
+    fan_rpm = Gauge('razer_fan_rpm', 'Fan RPM', ['device', 'fan'])
+    keyboard_brightness = Gauge('razer_keyboard_brightness_percent', 'Keyboard backlight brightness', ['device'])
+    dpi = Gauge('razer_mouse_dpi', 'Mouse DPI setting', ['device', 'axis'])
+    polling_rate = Gauge('razer_device_polling_rate_hz', 'Device polling rate', ['device'])
+    
+    def collect_razer_metrics():
+        """Collect metrics from OpenRazer sysfs interface"""
+        razer_path = "/sys/bus/hid/drivers/razerkbd/"
+        
+        # Find all Razer devices
+        devices = glob.glob(razer_path + "*/device_type")
+        
+        for device_path in devices:
+            device_dir = os.path.dirname(device_path)
+            device_name = os.path.basename(device_dir)
+            
+            # Battery metrics
+            battery_path = os.path.join(device_dir, "power_supply", "razer_*", "capacity")
+            battery_files = glob.glob(battery_path)
+            if battery_files:
+                try:
+                    with open(battery_files[0], 'r') as f:
+                        battery_level.labels(device=device_name).set(float(f.read().strip()))
+                except:
+                    pass
+            
+            # Keyboard brightness
+            brightness_path = os.path.join(device_dir, "matrix_brightness")
+            if os.path.exists(brightness_path):
+                try:
+                    with open(brightness_path, 'r') as f:
+                        brightness = int(f.read().strip())
+                        keyboard_brightness.labels(device=device_name).set(brightness * 100 / 255)
+                except:
+                    pass
+            
+            # Fan RPM (if available)
+            fan_path = os.path.join(device_dir, "fan_rpm")
+            if os.path.exists(fan_path):
+                try:
+                    with open(fan_path, 'r') as f:
+                        fan_rpm.labels(device=device_name, fan="main").set(float(f.read().strip()))
+                except:
+                    pass
+    
+    if __name__ == '__main__':
+        # Start Prometheus metrics server
+        start_http_server(9401)
+        
+        # Collect metrics every 10 seconds
+        while True:
+            try:
+                collect_razer_metrics()
+            except Exception as e:
+                print(f"Error collecting metrics: {e}")
+            time.sleep(10)
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: razer-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: razer-exporter
+  template:
+    metadata:
+      labels:
+        app: razer-exporter
+    spec:
+      hostNetwork: true
+      containers:
+      - name: razer-exporter
+        image: python:3.10-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install prometheus_client
+          python /scripts/razer-exporter.py
+        ports:
+        - containerPort: 9401
+          hostPort: 9401
+          name: metrics
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: dbus
+          mountPath: /var/run/dbus
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: script
+        configMap:
+          name: razer-exporter-script
+          defaultMode: 0755
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: dbus
+        hostPath:
+          path: /var/run/dbus
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: razer-exporter
+  namespace: monitoring
+  labels:
+    app: razer-exporter
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9401
+    targetPort: 9401
+  selector:
+    app: razer-exporter

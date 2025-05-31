@@ -1,0 +1,435 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: power-exporter-script
+  namespace: monitoring
+data:
+  power-exporter.py: |
+    #!/usr/bin/env python3
+    import os
+    import time
+    import glob
+    import threading
+    from datetime import datetime, timedelta
+    from prometheus_client import start_http_server, Gauge, Counter, Info
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    
+    # Define Prometheus metrics
+    cpu_package_power = Gauge('node_cpu_package_power_watts', 'CPU package power consumption', ['package'])
+    cpu_core_power = Gauge('node_cpu_core_power_watts', 'CPU core power consumption', ['core'])
+    dram_power = Gauge('node_dram_power_watts', 'DRAM power consumption', ['socket'])
+    gpu_power = Gauge('node_gpu_power_watts', 'GPU power consumption', ['gpu'])
+    gpu_temp = Gauge('nvidia_gpu_temperature_celsius', 'GPU Temperature in Celsius', ['gpu', 'name'])
+    gpu_memory_used = Gauge('nvidia_gpu_memory_used_mb', 'GPU Memory Used in MB', ['gpu', 'name'])
+    gpu_memory_total = Gauge('nvidia_gpu_memory_total_mb', 'GPU Memory Total in MB', ['gpu', 'name'])
+    gpu_utilization = Gauge('nvidia_gpu_utilization_percent', 'GPU Utilization Percentage', ['gpu', 'name'])
+    gpu_fan_speed = Gauge('nvidia_gpu_fan_speed_percent', 'GPU Fan Speed Percentage', ['gpu', 'name'])
+    battery_capacity = Gauge('node_battery_capacity_wh', 'Battery capacity in Wh', ['battery'])
+    battery_voltage = Gauge('node_battery_voltage_volts', 'Battery voltage', ['battery'])
+    battery_current = Gauge('node_battery_current_amps', 'Battery current', ['battery'])
+    battery_power = Gauge('node_battery_power_watts', 'Battery power consumption', ['battery'])
+    battery_health = Gauge('node_battery_health_percent', 'Battery health percentage', ['battery'])
+    ac_power = Gauge('node_ac_adapter_power_watts', 'AC adapter power', ['adapter'])
+    
+    # Health check metrics
+    last_successful_scrape = Gauge('power_exporter_last_successful_scrape_timestamp', 'Unix timestamp of last successful scrape')
+    scrape_errors_total = Counter('power_exporter_scrape_errors_total', 'Total number of scrape errors', ['component'])
+    exporter_info = Info('power_exporter_info', 'Power exporter information')
+    gpu_available = Gauge('power_exporter_gpu_available', 'Whether GPU metrics are available (1=yes, 0=no)')
+    
+    # Global health status
+    health_status = {
+        'healthy': True,
+        'last_update': datetime.now(),
+        'errors': [],
+        'gpu_available': False,
+        'components': {
+            'rapl': {'healthy': True, 'last_success': datetime.now()},
+            'battery': {'healthy': True, 'last_success': datetime.now()},
+            'gpu': {'healthy': True, 'last_success': datetime.now()}
+        }
+    }
+    
+    def read_value(path, default=0):
+        """Read numeric value from file"""
+        try:
+            with open(path, 'r') as f:
+                return float(f.read().strip())
+        except:
+            return default
+    
+    class HealthCheckHandler(BaseHTTPRequestHandler):
+        """HTTP handler for health checks"""
+        def do_GET(self):
+            if self.path == '/health':
+                self.send_health_response()
+            elif self.path == '/healthz':
+                self.send_healthz_response()
+            elif self.path == '/ready':
+                self.send_ready_response()
+            else:
+                self.send_error(404)
+        
+        def send_health_response(self):
+            """Detailed health check response"""
+            now = datetime.now()
+            status_code = 200 if health_status['healthy'] else 503
+            
+            # Check if we've had recent successful scrapes
+            for component, info in health_status['components'].items():
+                if now - info['last_success'] > timedelta(minutes=2):
+                    status_code = 503
+                    
+            response = {
+                'status': 'healthy' if status_code == 200 else 'unhealthy',
+                'timestamp': now.isoformat(),
+                'components': {}
+            }
+            
+            for component, info in health_status['components'].items():
+                response['components'][component] = {
+                    'healthy': info['healthy'],
+                    'last_success': info['last_success'].isoformat()
+                }
+            
+            if health_status['errors']:
+                response['recent_errors'] = health_status['errors'][-5:]  # Last 5 errors
+                
+            self.send_response(status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            import json
+            self.wfile.write(json.dumps(response).encode())
+        
+        def send_healthz_response(self):
+            """Simple health check for k8s"""
+            if health_status['healthy']:
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'OK')
+            else:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(b'Unhealthy')
+        
+        def send_ready_response(self):
+            """Readiness check"""
+            # Check if we've collected metrics recently
+            now = datetime.now()
+            if now - health_status['last_update'] < timedelta(seconds=30):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'Ready')
+            else:
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(b'Not Ready')
+        
+        def log_message(self, format, *args):
+            # Suppress access logs
+            pass
+    
+    def run_health_server():
+        """Run the health check HTTP server"""
+        server = HTTPServer(('', 8080), HealthCheckHandler)
+        server.serve_forever()
+    
+    def collect_rapl_metrics():
+        """Collect Intel RAPL (Running Average Power Limit) metrics"""
+        try:
+            rapl_path = "/sys/class/powercap/intel-rapl/"
+            
+            # Find all RAPL domains
+            domains = glob.glob(rapl_path + "intel-rapl:*")
+            
+            for domain in domains:
+                name_path = os.path.join(domain, "name")
+                energy_path = os.path.join(domain, "energy_uj")
+                
+                if os.path.exists(name_path) and os.path.exists(energy_path):
+                    name = read_value(name_path, "unknown")
+                    
+                    # Read energy in microjoules
+                    energy_uj = read_value(energy_path)
+                    
+                    # Convert to watts (this is instantaneous reading)
+                    if "package" in name:
+                        package_num = domain.split(":")[-1]
+                        cpu_package_power.labels(package=package_num).set(energy_uj / 1000000)
+                    elif "core" in name:
+                        core_num = domain.split(":")[-1]
+                        cpu_core_power.labels(core=core_num).set(energy_uj / 1000000)
+                    elif "dram" in name:
+                        socket_num = domain.split(":")[-1]
+                        dram_power.labels(socket=socket_num).set(energy_uj / 1000000)
+            
+            health_status['components']['rapl']['healthy'] = True
+            health_status['components']['rapl']['last_success'] = datetime.now()
+        except Exception as e:
+            print(f"Error collecting RAPL metrics: {e}")
+            health_status['components']['rapl']['healthy'] = False
+            health_status['errors'].append(f"RAPL error: {str(e)}")
+            scrape_errors_total.labels(component='rapl').inc()
+    
+    def collect_battery_metrics():
+        """Collect battery power metrics"""
+        try:
+            power_supply_path = "/sys/class/power_supply/"
+            
+            # Find all batteries
+            batteries = glob.glob(power_supply_path + "BAT*")
+            
+            for battery in batteries:
+                bat_name = os.path.basename(battery)
+                
+                # Read battery values
+                voltage_now = read_value(os.path.join(battery, "voltage_now")) / 1000000  # Convert to volts
+                current_now = read_value(os.path.join(battery, "current_now")) / 1000000  # Convert to amps
+                charge_full = read_value(os.path.join(battery, "charge_full")) / 1000000
+                charge_full_design = read_value(os.path.join(battery, "charge_full_design")) / 1000000
+                energy_full = read_value(os.path.join(battery, "energy_full")) / 1000000  # Convert to Wh
+                
+                # Calculate metrics
+                if voltage_now > 0:
+                    battery_voltage.labels(battery=bat_name).set(voltage_now)
+                    
+                    if current_now > 0:
+                        battery_current.labels(battery=bat_name).set(current_now)
+                        power_watts = voltage_now * current_now
+                        battery_power.labels(battery=bat_name).set(power_watts)
+                    
+                    if energy_full > 0:
+                        battery_capacity.labels(battery=bat_name).set(energy_full)
+                    
+                    if charge_full_design > 0 and charge_full > 0:
+                        health_percent = (charge_full / charge_full_design) * 100
+                        battery_health.labels(battery=bat_name).set(health_percent)
+            
+            # AC adapter
+            adapters = glob.glob(power_supply_path + "ADP*")
+            for adapter in adapters:
+                adapter_name = os.path.basename(adapter)
+                online = read_value(os.path.join(adapter, "online"))
+                if online:
+                    # Estimate AC power based on battery charging
+                    # This is a rough estimate - actual measurement would require hardware support
+                    ac_power.labels(adapter=adapter_name).set(65)  # Default 65W for Razer Blade
+            
+            health_status['components']['battery']['healthy'] = True
+            health_status['components']['battery']['last_success'] = datetime.now()
+        except Exception as e:
+            print(f"Error collecting battery metrics: {e}")
+            health_status['components']['battery']['healthy'] = False
+            health_status['errors'].append(f"Battery error: {str(e)}")
+            scrape_errors_total.labels(component='battery').inc()
+    
+    def collect_gpu_power():
+        """Collect GPU metrics from nvidia-smi"""
+        try:
+            import subprocess
+            # Get comprehensive GPU metrics
+            result = subprocess.run([
+                'nvidia-smi', 
+                '--query-gpu=index,name,temperature.gpu,power.draw,memory.used,memory.total,utilization.gpu,fan.speed',
+                '--format=csv,noheader,nounits'
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                for line in result.stdout.strip().split('\n'):
+                    if not line:
+                        continue
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 8:
+                        idx = parts[0]
+                        name = parts[1]
+                        
+                        # Temperature
+                        try:
+                            gpu_temp.labels(gpu=idx, name=name).set(float(parts[2]))
+                        except:
+                            pass
+                        
+                        # Power
+                        try:
+                            gpu_power.labels(gpu=f"gpu{idx}").set(float(parts[3]))
+                        except:
+                            pass
+                        
+                        # Memory
+                        try:
+                            gpu_memory_used.labels(gpu=idx, name=name).set(float(parts[4]))
+                            gpu_memory_total.labels(gpu=idx, name=name).set(float(parts[5]))
+                        except:
+                            pass
+                        
+                        # Utilization
+                        try:
+                            gpu_utilization.labels(gpu=idx, name=name).set(float(parts[6]))
+                        except:
+                            pass
+                        
+                        # Fan speed
+                        try:
+                            if parts[7] != '[N/A]':
+                                gpu_fan_speed.labels(gpu=idx, name=name).set(float(parts[7]))
+                        except:
+                            pass
+                
+                # Mark GPU as available and healthy
+                health_status['gpu_available'] = True
+                gpu_available.set(1)
+                health_status['components']['gpu']['healthy'] = True
+                health_status['components']['gpu']['last_success'] = datetime.now()
+            else:
+                health_status['gpu_available'] = False
+                gpu_available.set(0)
+        except Exception as e:
+            print(f"Error collecting GPU metrics: {e}")
+            health_status['components']['gpu']['healthy'] = False
+            health_status['gpu_available'] = False
+            gpu_available.set(0)
+            health_status['errors'].append(f"GPU error: {str(e)}")
+            scrape_errors_total.labels(component='gpu').inc()
+    
+    if __name__ == '__main__':
+        # Start Prometheus metrics server
+        start_http_server(9402)
+        
+        # Start health check server in a separate thread
+        health_thread = threading.Thread(target=run_health_server, daemon=True)
+        health_thread.start()
+        print("Health check server started on port 8080")
+        
+        # Set exporter info
+        exporter_info.info({'version': '1.0', 'gpu_support': 'nvidia-smi'})
+        
+        # Collect metrics every 5 seconds
+        while True:
+            try:
+                # Clear old errors (keep last 10)
+                if len(health_status['errors']) > 10:
+                    health_status['errors'] = health_status['errors'][-10:]
+                
+                # Collect metrics
+                collect_rapl_metrics()
+                collect_battery_metrics()
+                collect_gpu_power()
+                
+                # Update overall health status
+                health_status['healthy'] = all(comp['healthy'] for comp in health_status['components'].values())
+                health_status['last_update'] = datetime.now()
+                
+                # Update timestamp metric
+                last_successful_scrape.set(time.time())
+                
+            except Exception as e:
+                print(f"Error collecting metrics: {e}")
+                health_status['healthy'] = False
+                scrape_errors_total.labels(component='main').inc()
+                
+            time.sleep(5)
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: power-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: power-exporter
+  template:
+    metadata:
+      labels:
+        app: power-exporter
+    spec:
+      hostPID: true
+      containers:
+      - name: power-exporter
+        image: python:3.10-slim
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install prometheus_client
+          python /scripts/power-exporter.py
+        ports:
+        - containerPort: 9402
+          name: metrics
+        - containerPort: 8080
+          name: health
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: usr-bin
+          mountPath: /usr/bin
+          readOnly: true
+        - name: usr-lib
+          mountPath: /usr/lib
+          readOnly: true
+        securityContext:
+          privileged: true
+        env:
+        - name: PATH
+          value: "/usr/local/bin:/usr/bin:/bin"
+        - name: LD_LIBRARY_PATH
+          value: "/usr/lib/x86_64-linux-gnu:/usr/lib"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: script
+        configMap:
+          name: power-exporter-script
+          defaultMode: 0755
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: usr-bin
+        hostPath:
+          path: /usr/bin
+      - name: usr-lib
+        hostPath:
+          path: /usr/lib
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: power-exporter
+  namespace: monitoring
+  labels:
+    app: power-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9402"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9402
+    targetPort: 9402
+  selector:
+    app: power-exporter
