@@ -63,7 +63,7 @@ ODIN/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ODIN.git
+git clone https://github.com/magicat777/ODIN.git
 cd ODIN
 
 # Install using Helm
@@ -158,13 +158,13 @@ kubectl exec -n monitoring <anomaly-pod> -- curl http://localhost:8080/health
 ### One-Line Deployment
 ```bash
 # Deploy complete ODIN stack
-kubectl apply -f https://raw.githubusercontent.com/yourusername/ODIN/main/k8s/
+kubectl apply -f https://raw.githubusercontent.com/magicat777/ODIN/main/k8s/
 ```
 
 ### Manual Deployment
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/ODIN.git
+git clone https://github.com/magicat777/ODIN.git
 cd ODIN
 
 # Deploy core monitoring
@@ -206,6 +206,18 @@ global:
 - **ℹ️ Info**: Model retraining, baseline updates, system changes
 
 ## Development
+
+### Project Development Journey
+
+The ODIN project evolved through several critical phases:
+
+1. **Phase 1 - Docker Foundation**: Initial Docker Compose approach failed due to networking limitations on Linux
+2. **Phase 2 - Kubernetes Migration**: Strategic move to K3s solved service discovery and networking challenges  
+3. **Phase 3 - Core Monitoring**: Deployment of Prometheus, Grafana, Loki stack with 15+ dashboards
+4. **Phase 4 - ML Integration**: Implementation of 3-layer anomaly detection with Isolation Forest algorithms
+5. **Phase 5 - Production Ready**: Performance optimization, security hardening, and automated alerting
+
+See [PROJECT_PHASES.md](PROJECT_PHASES.md) for complete development timeline and technical details.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
