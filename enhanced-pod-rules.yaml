@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: enhanced-pod-monitoring-rules
+  namespace: monitoring
+data:
+  pod-monitoring.yml: |
+    groups:
+    - name: pod-monitoring-enhanced
+      rules:
+      # Enhanced Pod OOM Detection
+      - alert: PodOOMKilledEnhanced
+        expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled", namespace="monitoring"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          alert_type: pod_health
+        annotations:
+          summary: "Pod {{ $labels.pod }} was OOM killed"
+          description: |
+            Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} was killed due to out of memory.
+            This indicates memory limits are too low or there's a memory leak.
+            Restart count: {{ $labels.restart_count }}
+            
+      # Enhanced Crash Loop Detection  
+      - alert: PodCrashLoopEnhanced
+        expr: rate(kube_pod_container_status_restarts_total{namespace="monitoring"}[15m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          alert_type: pod_health
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash looping"
+          description: |
+            Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} is restarting frequently.
+            Restart rate: {{ $value }} restarts/minute over 15 minutes.
+            
+      # Proactive Memory Warning
+      - alert: PodHighMemoryUsage
+        expr: (container_memory_working_set_bytes{namespace="monitoring", container!="", container!="POD"} / container_spec_memory_limit_bytes{namespace="monitoring", container!="", container!="POD"}) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-stack
+          alert_type: resource_usage
+        annotations:
+          summary: "Pod {{ $labels.pod }} high memory usage"
+          description: |
+            Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} is using {{ $value }}% of memory limit.
+            This may lead to OOM kill if not addressed.
+            
+      # Monitoring Component Health
+      - alert: MonitoringComponentDown
+        expr: up{job=~"prometheus|grafana|loki|alertmanager", namespace="monitoring"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: monitoring-stack
+          alert_type: service_health
+        annotations:
+          summary: "Monitoring component {{ $labels.job }} is down"
+          description: |
+            Critical monitoring component {{ $labels.job }} on {{ $labels.instance }} is down.
+            This affects overall monitoring capabilities.

@@ -1,0 +1,244 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: email-bridge-script
+  namespace: monitoring
+data:
+  email_bridge.py: |
+    #!/usr/bin/env python3
+    import smtplib
+    import json
+    import logging
+    from datetime import datetime
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import threading
+
+    # Configure logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger('email-bridge')
+
+    # Email configuration
+    SMTP_HOST = 'smtp.gmail.com'
+    SMTP_PORT = 587
+    FROM_EMAIL = 'odin-alerts@gmail.com'
+    TO_EMAIL = 'jason.holt@andominia.com'
+    USERNAME = 'jason.holt@andominia.com'
+    PASSWORD = 'dhmw fxpu zhyf oacw'  # Generate at: https://myaccount.google.com/apppasswords
+
+    def send_email(subject, body):
+        """Send email via Gmail SMTP"""
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = FROM_EMAIL
+            msg['To'] = TO_EMAIL
+            msg['Subject'] = subject
+            
+            msg.attach(MIMEText(body, 'plain'))
+            
+            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+            server.starttls()
+            server.login(USERNAME, PASSWORD)
+            text = msg.as_string()
+            server.sendmail(FROM_EMAIL, TO_EMAIL, text)
+            server.quit()
+            
+            logger.info(f"Email sent successfully: {subject}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send email: {e}")
+            return False
+
+    def format_alert_email(alerts_data):
+        """Format alert data into readable email"""
+        try:
+            alerts = json.loads(alerts_data)
+            
+            if not alerts.get('alerts'):
+                return None, None
+                
+            # Get first alert for subject
+            first_alert = alerts['alerts'][0]
+            alertname = first_alert['labels'].get('alertname', 'Unknown Alert')
+            
+            subject = f"🚨 ODIN Alert: {alertname}"
+            
+            # Build email body
+            body_lines = [
+                "ODIN Monitoring Alert",
+                "=" * 50,
+                f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                f"Status: {alerts.get('status', 'Unknown')}",
+                ""
+            ]
+            
+            for i, alert in enumerate(alerts['alerts'], 1):
+                labels = alert.get('labels', {})
+                annotations = alert.get('annotations', {})
+                
+                body_lines.extend([
+                    f"Alert #{i}: {labels.get('alertname', 'Unknown')}",
+                    f"Severity: {labels.get('severity', 'Unknown')}",
+                    f"Summary: {annotations.get('summary', 'No summary')}",
+                    f"Description: {annotations.get('description', 'No description')}",
+                    ""
+                ])
+                
+                # Add relevant labels
+                if labels.get('instance'):
+                    body_lines.append(f"Instance: {labels['instance']}")
+                if labels.get('service'):
+                    body_lines.append(f"Service: {labels['service']}")
+                if labels.get('pod'):
+                    body_lines.append(f"Pod: {labels['pod']}")
+                if labels.get('namespace'):
+                    body_lines.append(f"Namespace: {labels['namespace']}")
+                    
+                body_lines.append("-" * 30)
+                
+            body_lines.extend([
+                "",
+                "Quick Links:",
+                "• Grafana: http://localhost:31494",
+                "• Prometheus: http://localhost:31493", 
+                "• AlertManager: http://localhost:31495"
+            ])
+            
+            return subject, "\n".join(body_lines)
+            
+        except Exception as e:
+            logger.error(f"Failed to format alert email: {e}")
+            return f"ODIN Alert - Parse Error", f"Failed to parse alert data: {e}"
+
+    class EmailBridgeHandler(BaseHTTPRequestHandler):
+        """HTTP handler for webhook alerts"""
+        
+        def do_POST(self):
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                
+                # Parse alert data
+                alert_data = post_data.decode('utf-8')
+                logger.info(f"Received alert webhook: {len(alert_data)} bytes")
+                
+                # Format and send email
+                subject, body = format_alert_email(alert_data)
+                
+                if subject and body:
+                    success = send_email(subject, body)
+                    
+                    if success:
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'text/plain')
+                        self.end_headers()
+                        self.wfile.write(b'Email sent successfully')
+                    else:
+                        self.send_response(500)
+                        self.send_header('Content-Type', 'text/plain')
+                        self.end_headers()
+                        self.wfile.write(b'Failed to send email')
+                else:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'text/plain')
+                    self.end_headers()
+                    self.wfile.write(b'Invalid alert data')
+                    
+            except Exception as e:
+                logger.error(f"Error processing webhook: {e}")
+                self.send_response(500)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(f'Error: {str(e)}'.encode())
+        
+        def do_GET(self):
+            if self.path == '/health':
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b'Email bridge healthy')
+            else:
+                self.send_response(404)
+                self.end_headers()
+        
+        def log_message(self, format, *args):
+            # Custom logging to avoid spam
+            pass
+
+    def main():
+        logger.info("Starting ODIN Email Bridge on port 8081")
+        
+        server = HTTPServer(('0.0.0.0', 8081), EmailBridgeHandler)
+        server.serve_forever()
+
+    if __name__ == '__main__':
+        main()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-bridge
+  namespace: monitoring
+  labels:
+    app: email-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: email-bridge
+  template:
+    metadata:
+      labels:
+        app: email-bridge
+    spec:
+      containers:
+      - name: email-bridge
+        image: python:3.11-slim
+        command: ["python", "/app/email_bridge.py"]
+        ports:
+        - containerPort: 8081
+          name: http
+        volumeMounts:
+        - name: script
+          mountPath: /app
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: script
+        configMap:
+          name: email-bridge-script
+          defaultMode: 0755
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: email-bridge
+  namespace: monitoring
+  labels:
+    app: email-bridge
+spec:
+  ports:
+  - port: 8081
+    targetPort: 8081
+    name: http
+  selector:
+    app: email-bridge
